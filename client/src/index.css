@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Better mobile spacing and touch targets */
+@media (max-width: 768px) {
+  /* Larger tap targets for buttons */
+  button, .btn {
+    min-height: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* Better modal sizing */
+  .modal-content, .fixed .bg-white {
+    margin: 16px;
+    max-height: calc(100vh - 32px);
+  }
+  
+  /* Table improvements */
+  table {
+    font-size: 14px;
+  }
+  
+  /* Better form inputs */
+  input, textarea, select {
+    font-size: 16px; /* Prevents zoom on iOS */
+    min-height: 44px;
+  }
+  
+  /* Icon adjustments */
+  .lucide, svg {
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+   /* Make tab navigation scrollable on mobile */
+  nav.-mb-px {
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  nav.-mb-px::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Ensure tabs don't shrink */
+  nav.-mb-px button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  
+  /* Add scroll indicator */
+  nav.-mb-px::after {
+    content: "→";
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(to left, white 0%, transparent 100%);
+    padding-left: 20px;
+    color: #9CA3AF;
+    pointer-events: none;
+  }
+}
+
+/* Your existing custom styles */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}

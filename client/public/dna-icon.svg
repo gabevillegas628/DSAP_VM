@@ -1,0 +1,61 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Sophisticated gradient matching your app -->
+    <linearGradient id="mainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6"/>
+      <stop offset="50%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#6366F1"/>
+    </linearGradient>
+    
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF"/>
+      <stop offset="100%" style="stop-color:#E0E7FF"/>
+    </linearGradient>
+    
+    <!-- Glow effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Modern background with subtle depth -->
+  <circle cx="16" cy="16" r="15" fill="url(#mainGradient)"/>
+  <circle cx="16" cy="16" r="15" fill="none" stroke="#1E3A8A" stroke-width="0.5" opacity="0.5"/>
+  
+  <!-- Central scientific symbol - representing sequence analysis -->
+  <!-- Stylized DNA base representation -->
+  <g filter="url(#glow)">
+    <!-- Outer ring - representing the analytical process -->
+    <circle cx="16" cy="16" r="10" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.4"/>
+    
+    <!-- Inner sequence data visualization -->
+    <g stroke="url(#accentGradient)" stroke-width="2" fill="none" stroke-linecap="round">
+      <!-- Stylized sequence traces -->
+      <path d="M8 12 Q12 8 16 12 Q20 16 24 12" opacity="0.8"/>
+      <path d="M8 16 Q12 20 16 16 Q20 12 24 16" opacity="0.8"/>
+      <path d="M8 20 Q12 24 16 20 Q20 16 24 20" opacity="0.8"/>
+    </g>
+    
+    <!-- Central nucleotide bases - ATCG representation -->
+    <g fill="#FFFFFF" font-family="monospace" font-size="6" font-weight="bold" text-anchor="middle">
+      <text x="11" y="13">A</text>
+      <text x="21" y="13">T</text>
+      <text x="11" y="20">C</text>
+      <text x="21" y="20">G</text>
+    </g>
+    
+    <!-- Modern connecting elements -->
+    <g stroke="#E0E7FF" stroke-width="1" opacity="0.6">
+      <line x1="11" y1="16" x2="21" y2="16"/>
+      <circle cx="13" cy="16" r="0.8" fill="#FFFFFF"/>
+      <circle cx="19" cy="16" r="0.8" fill="#FFFFFF"/>
+    </g>
+  </g>
+  
+  <!-- Subtle outer glow -->
+  <circle cx="16" cy="16" r="14" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.6"/>
+</svg>

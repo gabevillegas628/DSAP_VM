@@ -1,0 +1,432 @@
+// This is your Prisma schema file,
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int     @id @default(autoincrement())
+  email    String  @unique
+  password String // hashed password
+  name     String
+  role     String // 'director', 'instructor', 'student'
+  status   String  @default("pending") // 'pending', 'approved', 'rejected'
+  schoolId Int? // Foreign key to School (null for directors)
+  school   School? @relation(fields: [schoolId], references: [id])
+
+  demographics Demographics?
+
+  // Reset password tokens
+  resetToken      String?   // Token for password reset
+  resetTokenExpiry DateTime? // Token expiration time
+
+  // File relationships
+  assignedFiles UploadedFile[] @relation("AssignedFiles")
+  uploadedFiles UploadedFile[] @relation("UploadedFiles")
+
+  // Message relationships - Fixed with explicit relation names
+  sentMessages     Message[] @relation("MessageSender")
+  receivedMessages Message[] @relation("MessageRecipient")
+
+  // Practice Progress relationships
+  practiceProgress UserPracticeProgress[]
+
+  // Login & clone tracking
+  loginLogs LoginLog[]
+  cloneActivityLogs CloneActivityLog[] @relation("UserCloneActivity")
+
+  // Profile Picture
+  profilePicture String?
+
+  // Bug submission
+  bugReports BugReport[]
+  assignedBugReports BugReport[] @relation("AssignedBugReports")
+
+  discussions              CloneDiscussion[] @relation("StudentDiscussions")
+  discussionMessagesSent   DiscussionMessage[] @relation("DiscussionMessageSender")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])        // For search functionality
+  @@index([schoolId])    // For joining to School (probably already fast, but explicit is good)
+}
+
+model School {
+  id         Int      @id @default(autoincrement())
+  name       String
+  schoolId   String   @unique
+  instructor String
+  students   Int      @default(0)
+  users      User[] // Relation to users at this school
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([name])        // For school filter dropdown
+  @@index([instructor])  // For instructor filter dropdown
+}
+
+model ProgramSettings {
+  id                    Int      @id @default(autoincrement())
+  projectHeader         String   @default("DNA Analysis Program")
+  principalInvestigator String? // Just store the name as a string
+  projectName           String?
+  staffEmail            String?
+  organismName          String?
+  orfContactInformation String?
+  cloningVector         String?
+  sequencePrimer        String?
+  libraryName           String?
+  restrictionEnzyme     String?
+  description           String?
+  welcomeText           String? // NEW FIELD
+  overview              String? // NEW FIELD
+  collectDemographics   Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Demographics {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Your specific required questions
+  academicYear          String?  // 'freshman', 'sophomore', 'junior', 'senior', 'homeschooled'
+  yearsInProgram        String?  // 'first', 'second', 'third', 'fourth'
+  classesTaken          String?  // JSON array of selected classes
+  otherScienceCourses   String?  // Open-ended text field
+  
+  // Optional general demographic fields (keep these for future use)
+  age                   Int?
+  gender                String?
+  ethnicity             String?
+  educationLevel        String?
+  city                  String?
+  state                 String?
+  country               String?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model LoginLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loginTime DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+  location  String?
+  success   Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  
+  // Index for performance when querying by user or date
+  @@index([userId])
+  @@index([loginTime])
+  @@index([userId, loginTime])
+}
+
+model CloneActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation("UserCloneActivity", fields: [userId], references: [id])
+  
+  // Clone information (stored as strings for flexibility)
+  cloneName String
+  cloneType String   // 'practice' or 'research'
+  cloneId   Int?     // Optional reference to actual clone ID
+  
+  // Activity tracking
+  action    String   // 'start' or 'stop'
+  timestamp DateTime @default(now())
+  
+  // Optional context
+  currentStep String? // What step they were on
+  progress    Int?    // Their progress at the time
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([userId, cloneType])
+  @@index([timestamp])
+}
+
+model AnalysisQuestion {
+  id               String      @id @default(cuid())
+  step             String // 'clone-editing', 'blast', 'analysis-submission', 'review'
+  text             String
+  type             String // 'yes_no', 'select', 'text', 'textarea', 'dna_sequence', 'protein_sequence', 'number'
+  options          String? // JSON string for select options
+  required         Boolean     @default(true)
+  order            Int         @default(1)
+  conditionalLogic String? // JSON string for conditional logic
+
+  // Question Grouping
+  questionGroup    String?     // Group name within the step
+  groupOrder       Int         @default(0) // Order of groups within step
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  masterHelpTopic  MasterHelpTopic?
+}
+
+model CommonFeedback {
+  id         Int      @id @default(autoincrement())
+  questionId String // Foreign key to AnalysisQuestion.id
+  title      String // Short title for the feedback option (e.g., "Missing units")
+  text       String // The actual feedback text (e.g., "Please include proper units in your answer.")
+  isActive   Boolean  @default(true) // Allow disabling without deleting
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Add index for faster queries by questionId
+  @@index([questionId])
+}
+
+model UploadedFile {
+  id           Int     @id @default(autoincrement())
+  filename     String
+  originalName String
+  cloneName    String
+  size         String
+  uploadDate   String
+  status       String  @default("Unassigned")
+  progress     Int     @default(0)
+  analysisData String? // JSON string to store answers and analysis progress
+
+  // User relationships
+  assignedToId Int?
+  assignedTo   User? @relation("AssignedFiles", fields: [assignedToId], references: [id])
+
+  uploadedById Int
+  uploadedBy   User @relation("UploadedFiles", fields: [uploadedById], references: [id])
+
+  // Message relationships
+  messages Message[]
+  cloneDiscussions CloneDiscussion[] @relation("CloneDiscussions")
+
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+
+  @@index([assignedToId])  // For finding files assigned to students
+  @@index([status])        // For filtering by status (used in your status system)
+  @@index([uploadedById])  // For finding files uploaded by a user
+}
+
+model CloneDiscussion {
+  id              Int      @id @default(autoincrement())
+  studentId       Int
+  student         User     @relation("StudentDiscussions", fields: [studentId], references: [id])
+  cloneId         Int?
+  clone           UploadedFile? @relation("CloneDiscussions", fields: [cloneId], references: [id])
+  practiceCloneId Int?
+  practiceClone   PracticeClone? @relation("PracticeCloneDiscussions", fields: [practiceCloneId], references: [id])
+  title           String
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastMessageAt   DateTime @default(now())
+  messages        DiscussionMessage[]
+  
+  @@unique([studentId, cloneId])
+  @@unique([studentId, practiceCloneId])
+}
+
+model DiscussionMessage {
+  id           Int             @id @default(autoincrement())
+  discussionId Int
+  discussion   CloneDiscussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  senderId     Int
+  sender       User            @relation("DiscussionMessageSender", fields: [senderId], references: [id])
+  content      String
+  messageType  String          @default("message") // 'message', 'system', 'feedback'
+  readBy       String?         // JSON array of user IDs
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Message {
+  id          Int     @id @default(autoincrement())
+  subject     String
+  content     String
+  messageType String  @default("support") // 'support', 'announcement', 'general', 'review_feedback'
+  isRead      Boolean @default(false)
+
+  // User relationships - Fixed with explicit relation names
+  senderId Int
+  sender   User @relation("MessageSender", fields: [senderId], references: [id])
+
+  recipientId Int
+  recipient   User @relation("MessageRecipient", fields: [recipientId], references: [id])
+
+  // Clone context (optional - for support messages)
+  cloneId       Int?
+  clone         UploadedFile? @relation(fields: [cloneId], references: [id])
+  cloneProgress Int? // Progress at time of message
+  currentStep   String? // Analysis step at time of message
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  isGroupMessage    Boolean? @default(false)
+  groupParticipants String? // JSON string containing array of participant IDs
+
+  @@index([recipientId])     // For finding messages sent to a user
+  @@index([recipientId, isRead]) // For finding unread messages for a user
+  @@index([senderId])        // For finding messages sent by a user
+}
+
+model PracticeClone {
+  id           Int      @id @default(autoincrement())
+  cloneName    String
+  filename     String // The .ab1 file
+  originalName String
+  description  String?
+  isActive     Boolean  @default(true)
+  uploadDate   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  practiceAnswers PracticeAnswer[]
+  userProgress    UserPracticeProgress[]
+  cloneDiscussions CloneDiscussion[] @relation("PracticeCloneDiscussions")
+}
+
+model PracticeAnswer {
+  id              String  @id @default(cuid())
+  practiceCloneId Int
+  questionId      String // References AnalysisQuestion.id
+  correctAnswer   String // The predetermined correct answer
+  explanation     String? // Optional explanation for the answer
+
+  practiceClone PracticeClone @relation(fields: [practiceCloneId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceCloneId, questionId])
+}
+
+model UserPracticeProgress {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  practiceCloneId Int
+  progress        Int       @default(0)
+  answers         String? // JSON string of user's answers
+  currentStep     String    @default("clone-editing")
+  status          String    @default("Available")
+  lastSaved       DateTime?
+  submittedAt     DateTime?
+  reviewComments  String? // JSON string for auto-generated feedback
+  reviewScore     Int?
+  lastReviewed    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id])
+  practiceClone PracticeClone @relation(fields: [practiceCloneId], references: [id])
+
+  @@unique([userId, practiceCloneId])
+  @@index([userId])        // For finding all practice progress for a user
+  @@index([practiceCloneId]) // For finding all users working on a practice clone
+}
+
+model HelpTopic {
+  id                String           @id @default(cuid())
+  masterHelpTopicId String           // Foreign key to MasterHelpTopic
+  masterHelpTopic   MasterHelpTopic  @relation(fields: [masterHelpTopicId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?          // Brief description of this specific help topic
+  videoBoxUrl       String
+  helpDocumentUrl   String
+  order             Int              @default(0) // For ordering multiple topics
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([masterHelpTopicId])
+  @@index([order])
+}
+
+model StepHelp {
+  id               String          @id @default(cuid())
+  masterStepHelpId String          // Foreign key to MasterStepHelp
+  masterStepHelp   MasterStepHelp  @relation(fields: [masterStepHelpId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  videoBoxUrl      String
+  helpDocumentUrl  String
+  order            Int             @default(0)
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([masterStepHelpId])
+  @@index([order])
+}
+
+model MasterHelpTopic {
+  id                 String           @id @default(cuid())
+  analysisQuestionId String           @unique // One master per question
+  analysisQuestion   AnalysisQuestion @relation(fields: [analysisQuestionId], references: [id], onDelete: Cascade)
+  title              String           // Overall title for this question's help
+  isActive           Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  // One-to-many relationship with actual help topics
+  helpTopics         HelpTopic[]
+
+  @@index([analysisQuestionId])
+}
+
+model MasterStepHelp {
+  id          String     @id @default(cuid())
+  step        String     @unique // 'clone-editing', 'blast', etc.
+  title       String     // Overall title for this step's help
+  description String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // One-to-many relationship with actual step help topics
+  stepHelps   StepHelp[]
+
+  @@index([step])
+}
+
+model BugReport {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  steps       String?
+  urgency     String   @default("medium")
+  status      String   @default("open")
+  
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  userRole    String
+  
+  browserInfo   String?
+  consoleOutput String? // Add this new field
+  resolution    String?
+  
+  assignedToId Int?
+  assignedTo   User? @relation("AssignedBugReports", fields: [assignedToId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  resolvedAt  DateTime?
+  
+  @@index([status])
+  @@index([urgency])
+  @@index([userId])
+  @@index([createdAt])
+}

@@ -1,0 +1,92 @@
+OPEN SOURCE LICENSES
+
+This application uses the following open source libraries:
+
+FRONTEND DEPENDENCIES
+
+REACT
+License: MIT
+Copyright (c) Facebook, Inc. and its affiliates.
+Full license: https://github.com/facebook/react/blob/main/LICENSE
+
+REACT ROUTER DOM
+License: MIT
+Copyright (c) React Training 2016-2018, Reach Router 2018-2019
+Full license: https://github.com/remix-run/react-router/blob/main/LICENSE.md
+
+LUCIDE REACT
+License: ISC
+Copyright (c) 2022, Lucide Contributors
+Full license: https://github.com/lucide-icons/lucide/blob/main/LICENSE
+
+TAILWIND CSS
+License: MIT
+Copyright (c) Tailwind Labs, Inc.
+Full license: https://github.com/tailwindlabs/tailwindcss/blob/master/LICENSE
+
+BACKEND DEPENDENCIES
+
+EXPRESS.JS
+License: MIT
+Copyright (c) 2009-2014 TJ Holowaychuk
+Full license: https://github.com/expressjs/express/blob/master/LICENSE
+
+PRISMA CLIENT
+License: Apache-2.0
+Copyright (c) 2018-2023 Prisma Data, Inc.
+Full license: https://github.com/prisma/prisma/blob/main/LICENSE
+
+BCRYPTJS
+License: MIT
+Copyright (c) 2013 Daniel Wirtz
+Full license: https://github.com/dcodeIO/bcrypt.js/blob/master/LICENSE
+
+JSONWEBTOKEN
+License: MIT
+Copyright (c) 2015 Auth0, Inc.
+Full license: https://github.com/auth0/node-jsonwebtoken/blob/master/LICENSE
+
+MULTER
+License: MIT
+Copyright (c) 2014 Hage Yaapa
+Full license: https://github.com/expressjs/multer/blob/master/LICENSE
+
+CORS
+License: MIT
+Copyright (c) 2013 Troy Goode
+Full license: https://github.com/expressjs/cors/blob/master/LICENSE
+
+DOTENV
+License: BSD-2-Clause
+Copyright (c) 2015, Scott Motte
+Full license: https://github.com/motdotla/dotenv/blob/master/LICENSE
+
+NODE.JS BUILT-IN MODULES
+Node.js built-in modules (fs, path, console) are part of Node.js
+License: MIT (Node.js)
+Full license: https://github.com/nodejs/node/blob/main/LICENSE
+
+NODE-FETCH
+License: MIT
+Copyright (c) 2016 David Frank
+Full license: https://github.com/node-fetch/node-fetch/blob/main/LICENSE.md
+
+NODEMAILER
+License: MIT
+Copyright (c) 2011-2019 Andris Reinman
+Full license: https://github.com/nodemailer/nodemailer/blob/master/LICENSE
+
+BCRYPT
+License: MIT
+Copyright (c) 2010 Nicholas Campbell
+Full license: https://github.com/kelektiv/node.bcrypt.js/blob/master/LICENSE
+
+DEVELOPMENT NOTES
+- This application may use additional transitive dependencies
+- Complete dependency information can be found in package.json files
+- Individual license files are available in node_modules directories
+- Some dependencies may have been updated since this list was compiled
+
+For questions about licensing compliance or to report licensing issues, contact the development team.
+
+Last updated: September 1, 2025
