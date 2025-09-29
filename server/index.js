@@ -3990,7 +3990,7 @@ app.post('/api/practice-clones/upload', upload.array('files'), async (req, res) 
       const practiceClone = await prisma.practiceClone.create({
         data: {
           cloneName: cloneName,
-          filename: file.filename, // S3 key instead of local filename
+          filename: file.filename, // Use local filename, not S3 key
           originalName: file.originalname,
           description: `Practice clone: ${cloneName}`,
           isActive: true
@@ -4000,7 +4000,6 @@ app.post('/api/practice-clones/upload', upload.array('files'), async (req, res) 
       uploadedPracticeClones.push(practiceClone);
     }
 
-    console.log(`Successfully uploaded ${uploadedPracticeClones.length} practice clones`);
     res.json(uploadedPracticeClones);
   } catch (error) {
     console.error('Upload error:', error);
@@ -4030,7 +4029,6 @@ app.delete('/api/practice-clones/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get practice clone info before deletion
     const practiceCloneToDelete = await prisma.practiceClone.findUnique({
       where: { id: parseInt(id) }
     });
@@ -4039,54 +4037,45 @@ app.delete('/api/practice-clones/:id', async (req, res) => {
       return res.status(404).json({ error: 'Practice clone not found' });
     }
 
-    console.log('=== DELETING PRACTICE CLONE FROM S3 AND DATABASE ===');
+    console.log('=== DELETING PRACTICE CLONE FROM LOCAL STORAGE AND DATABASE ===');
     console.log('Practice Clone ID:', id);
-    console.log('S3 Key:', practiceCloneToDelete.filename);
+    console.log('Local filename:', practiceCloneToDelete.filename);
     console.log('Clone Name:', practiceCloneToDelete.cloneName);
 
-    // Delete from S3 first
+    // Delete from local storage first
     try {
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: practiceCloneToDelete.filename
-      });
-
-      await s3Client.send(deleteCommand);
-      console.log('Successfully deleted practice clone from S3:', practiceCloneToDelete.filename);
-    } catch (s3Error) {
-      console.error('Error deleting practice clone from S3 (continuing with database deletion):', s3Error);
-      // Continue with database deletion even if S3 deletion fails
+      const filePath = path.join(__dirname, 'uploads', practiceCloneToDelete.filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('Successfully deleted practice clone from local storage:', practiceCloneToDelete.filename);
+      }
+    } catch (localError) {
+      console.error('Error deleting from local storage (continuing with database deletion):', localError);
     }
 
     // Delete associated database records
-    console.log('Deleting associated database records...');
-
     await prisma.practiceAnswer.deleteMany({
       where: { practiceCloneId: parseInt(id) }
     });
-    console.log('Deleted practice answers');
 
     await prisma.userPracticeProgress.deleteMany({
       where: { practiceCloneId: parseInt(id) }
     });
-    console.log('Deleted user practice progress');
 
-    // Delete any associated clone discussions
     await prisma.cloneDiscussion.deleteMany({
       where: { practiceCloneId: parseInt(id) }
     });
-    console.log('Deleted associated discussions');
 
-    // Finally delete the practice clone record
+    // Finally delete the practice clone itself
     await prisma.practiceClone.delete({
       where: { id: parseInt(id) }
     });
-    console.log('Deleted practice clone from database');
 
     res.json({
-      message: 'Practice clone and associated file deleted successfully',
+      message: 'Practice clone deleted successfully',
       deletedClone: practiceCloneToDelete.cloneName
     });
+
   } catch (error) {
     console.error('Error deleting practice clone:', error);
     res.status(500).json({ error: error.message });
@@ -4311,22 +4300,16 @@ app.get('/api/practice-clones/:id/download', async (req, res) => {
       return res.status(404).json({ error: 'Practice clone not found' });
     }
 
-    console.log('=== PRACTICE CLONE LOCAL DOWNLOAD ===');
-    console.log('Practice Clone ID:', id);
-    console.log('Filename:', practiceClone.filename);
-    console.log('Original name:', practiceClone.originalName);
-
     const filePath = path.join(__dirname, 'uploads', practiceClone.filename);
 
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Practice clone file not found on disk' });
+      return res.status(404).json({ error: 'File not found on disk' });
     }
 
     res.setHeader('Content-Disposition', `attachment; filename="${practiceClone.originalName}"`);
     res.sendFile(filePath);
-
   } catch (error) {
-    console.error('Practice clone download error:', error.message);
+    console.error('Practice clone download error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -6212,63 +6195,62 @@ app.get('/api/practice-clones/missing-files', authenticateToken, requireRole(['d
       let checkMethod = null;
 
       try {
-        // Method 1: Check the exact filename from database
+        // Method 1: Check the exact filename from database in local storage
         if (clone.filename) {
-          const headCommand = new HeadObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: clone.filename
-          });
-
-          await s3Client.send(headCommand);
-          fileExists = true;
-          actualFilename = clone.filename;
-          checkMethod = 'exact_match';
+          const filePath = path.join(__dirname, 'uploads', clone.filename);
+          
+          if (fs.existsSync(filePath)) {
+            fileExists = true;
+            actualFilename = clone.filename;
+            checkMethod = 'exact_match';
+          }
         }
       } catch (error) {
-        // Method 2: If exact filename doesn't exist, try to find similar files
+        console.error(`Error checking exact filename for ${clone.cloneName}:`, error);
+      }
+
+      // Method 2: If exact filename doesn't exist, try to find similar files
+      if (!fileExists) {
         try {
           console.log(`Exact filename not found for ${clone.cloneName}, searching for alternatives...`);
 
-          // List files that might match this clone
-          const listCommand = new ListObjectsV2Command({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Prefix: 'uploads/',
-            MaxKeys: 1000
-          });
+          const uploadsDir = path.join(__dirname, 'uploads');
+          
+          // Check if uploads directory exists
+          if (fs.existsSync(uploadsDir)) {
+            const allFiles = fs.readdirSync(uploadsDir);
 
-          const listResponse = await s3Client.send(listCommand);
-          const allFiles = listResponse.Contents || [];
+            // Look for files that contain the original name or clone name
+            const possibleMatches = allFiles.filter(filename => {
+              const lowerFilename = filename.toLowerCase();
+              const cloneName = clone.cloneName.toLowerCase();
+              const originalName = (clone.originalName || '').toLowerCase();
 
-          // Look for files that contain the original name or clone name
-          const possibleMatches = allFiles.filter(file => {
-            const key = file.Key.toLowerCase();
-            const cloneName = clone.cloneName.toLowerCase();
-            const originalName = (clone.originalName || '').toLowerCase();
-
-            return (
-              key.includes(cloneName) ||
-              (originalName && key.includes(originalName.replace('.ab1', ''))) ||
-              key.includes(cloneName.replace(' ', '')) ||
-              key.includes(cloneName.replace(/[^a-z0-9]/g, ''))
-            );
-          });
-
-          if (possibleMatches.length > 0) {
-            // Take the first match (most likely candidate)
-            actualFilename = possibleMatches[0].Key;
-            fileExists = true;
-            checkMethod = 'fuzzy_match';
-
-            console.log(`Found alternative file for ${clone.cloneName}: ${actualFilename}`);
-
-            // Update the database with the correct filename
-            await prisma.practiceClone.update({
-              where: { id: clone.id },
-              data: { filename: actualFilename }
+              return (
+                lowerFilename.includes(cloneName) ||
+                (originalName && lowerFilename.includes(originalName.replace('.ab1', ''))) ||
+                lowerFilename.includes(cloneName.replace(' ', '')) ||
+                lowerFilename.includes(cloneName.replace(/[^a-z0-9]/g, ''))
+              );
             });
 
-            console.log(`Updated database filename for ${clone.cloneName}`);
-            fixedFilenames++;
+            if (possibleMatches.length > 0) {
+              // Take the first match (most likely candidate)
+              actualFilename = possibleMatches[0];
+              fileExists = true;
+              checkMethod = 'fuzzy_match';
+
+              console.log(`Found alternative file for ${clone.cloneName}: ${actualFilename}`);
+
+              // Update the database with the correct filename
+              await prisma.practiceClone.update({
+                where: { id: clone.id },
+                data: { filename: actualFilename }
+              });
+
+              console.log(`Updated database filename for ${clone.cloneName}`);
+              fixedFilenames++;
+            }
           }
         } catch (listError) {
           console.error(`Error searching for alternative files for ${clone.cloneName}:`, listError);
@@ -6291,7 +6273,7 @@ app.get('/api/practice-clones/missing-files', authenticateToken, requireRole(['d
           description: clone.description,
           uploadDate: clone.uploadDate,
           hasAnswers: clone.practiceAnswers.length > 0,
-          reason: 'File not found in S3'
+          reason: 'File not found in local storage'
         });
       }
     }
