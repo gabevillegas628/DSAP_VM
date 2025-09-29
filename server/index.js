@@ -94,11 +94,50 @@ emailTransporter.verify((error, success) => {
 });
 */
 
+// Configure multer for local storage
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-// AWS S3 Configuration
-const { S3Client, GetObjectCommand, DeleteObjectCommand, PutObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const multerS3 = require('multer-s3');
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for local storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const filename = `${uniqueSuffix}-${file.originalname}`;
+    cb(null, filename);
+  }
+});
+
+const upload = multer({ storage: storage });
+
+async function deleteLocalFiles(filenames) {
+  const deletePromises = filenames.map(async (filename) => {
+    try {
+      const filePath = path.join(__dirname, 'uploads', filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('Successfully deleted local file:', filename);
+        return { filename, success: true };
+      }
+      return { filename, success: false, error: 'File not found' };
+    } catch (error) {
+      console.error('Error deleting local file:', filename, error);
+      return { filename, success: false, error: error.message };
+    }
+  });
+
+  const results = await Promise.allSettled(deletePromises);
+  return results.map(result => result.status === 'fulfilled' ? result.value : result.reason);
+}
 
 // Add this right after your require statements at the top
 console.log('=== ENVIRONMENT VARIABLES CHECK ===');
@@ -153,66 +192,8 @@ app.use(cors({
 
 app.use(express.json());
 
-// Configure multer for file uploads
-// Configure AWS S3 client
-const s3Client = new S3Client({
-  region: process.env.S3_REGION,
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-  },
-});
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Configure multer for S3 uploads
-const storage = multerS3({
-  s3: s3Client,
-  bucket: process.env.S3_BUCKET_NAME,
-  acl: 'private',
-  key: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const key = `uploads/${uniqueSuffix}-${file.originalname}`;
-    cb(null, key);
-  },
-  contentType: multerS3.AUTO_CONTENT_TYPE,
-});
-
-// Helper function to generate presigned URLs for secure downloads
-async function generatePresignedDownloadUrl(s3Key, originalName, expiresIn = 300) {
-  const command = new GetObjectCommand({
-    Bucket: process.env.S3_BUCKET_NAME,
-    Key: s3Key,
-    ResponseContentDisposition: `attachment; filename="${originalName}"`
-  });
-
-  try {
-    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn });
-    return signedUrl;
-  } catch (error) {
-    console.error('Error generating presigned URL:', error);
-    throw error;
-  }
-}
-
-// Helper function to delete multiple files from S3
-async function deleteFilesFromS3(s3Keys) {
-  const deletePromises = s3Keys.map(async (key) => {
-    try {
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: key
-      });
-      await s3Client.send(deleteCommand);
-      console.log('Successfully deleted from S3:', key);
-      return { key, success: true };
-    } catch (error) {
-      console.error('Error deleting from S3:', key, error);
-      return { key, success: false, error: error.message };
-    }
-  });
-
-  const results = await Promise.allSettled(deletePromises);
-  return results.map(result => result.status === 'fulfilled' ? result.value : result.reason);
-}
 
 const fileFilter = (req, file, cb) => {
   // Only allow .ab1 files
@@ -223,13 +204,6 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
-});
 
 // Rate limiting for NCBI API (max 3 requests per second)
 let lastRequestTime = 0;
@@ -1439,17 +1413,20 @@ app.use('/api/users/:userId/profile-picture', (req, res, next) => {
 
 // Profile picture upload configuration
 const profilePictureUpload = multer({
-  storage: multerS3({
-    s3: s3Client,
-    bucket: process.env.S3_BUCKET_NAME,
-    key: function (req, file, cb) {
+  storage: multer.diskStorage({
+    destination: function (req, file, cb) {
+      const profilePicsDir = path.join(__dirname, 'uploads', 'profile-pics');
+      if (!fs.existsSync(profilePicsDir)) {
+        fs.mkdirSync(profilePicsDir, { recursive: true });
+      }
+      cb(null, profilePicsDir);
+    },
+    filename: function (req, file, cb) {
       const userId = req.params.userId;
       const extension = file.originalname.split('.').pop();
-      const timestamp = Date.now();
-      const key = `profile-pics/user-${userId}-${timestamp}.${extension}`;
-      cb(null, key);
-    },
-    contentType: multerS3.AUTO_CONTENT_TYPE,
+      const filename = `user-${userId}.${extension}`;
+      cb(null, filename);
+    }
   }),
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -1472,10 +1449,13 @@ app.post('/api/users/:userId/profile-picture', profilePictureUpload.single('prof
       return res.status(400).json({ error: 'No image file uploaded' });
     }
 
+    // Create URL for the uploaded file
+    const profilePictureUrl = `/uploads/profile-pics/${req.file.filename}`;
+
     // Update user with new profile picture URL
     const updatedUser = await prisma.user.update({
       where: { id: parseInt(userId) },
-      data: { profilePicture: req.file.location },
+      data: { profilePicture: profilePictureUrl },
       include: {
         school: { select: { name: true, id: true } }
       }
@@ -1498,16 +1478,14 @@ app.delete('/api/users/:userId/profile-picture', async (req, res) => {
     });
 
     if (user?.profilePicture) {
-      // Extract S3 key from URL
-      const urlParts = user.profilePicture.split('/');
-      const s3Key = `profile-pics/${urlParts[urlParts.length - 1]}`;
+      // Delete local file
+      const filename = path.basename(user.profilePicture);
+      const filePath = path.join(__dirname, 'uploads', 'profile-pics', filename);
 
-      // Delete from S3
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: s3Key
-      });
-      await s3Client.send(deleteCommand);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('Deleted profile picture file:', filePath);
+      }
     }
 
     // Update user to remove profile picture
@@ -2114,7 +2092,8 @@ app.put('/api/uploaded-files/:id', async (req, res) => {
   }
 });
 
-// Download file (stream from S3)
+// Download file
+// UPDATE the download endpoint to use local file download:
 app.get('/api/uploaded-files/:id/download', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2127,38 +2106,27 @@ app.get('/api/uploaded-files/:id/download', async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
+    const filePath = path.join(__dirname, 'uploads', file.filename);
 
-    // Get the file from S3
-    const getObjectCommand = new GetObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: file.filename
-    });
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on disk' });
+    }
 
-    const s3Response = await s3Client.send(getObjectCommand);
-
-    // Set the appropriate headers for file download
-    res.setHeader('Content-Type', s3Response.ContentType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
-    res.setHeader('Content-Length', s3Response.ContentLength);
-
-    console.log('Streaming file from S3...');
-
-    // Stream the file from S3 to the client
-    s3Response.Body.pipe(res);
-
+    res.sendFile(filePath);
   } catch (error) {
-    console.error('S3 download error:', error.message);
+    console.error('File download error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // Delete file
 
+// UPDATE the delete endpoint to use local file deletion:
 app.delete('/api/uploaded-files/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // First check if file is assigned to a student
     const fileToDelete = await prisma.uploadedFile.findUnique({
       where: { id: parseInt(id) },
       include: {
@@ -2172,7 +2140,6 @@ app.delete('/api/uploaded-files/:id', async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // Prevent deletion if assigned to a student
     if (fileToDelete.assignedTo) {
       return res.status(400).json({
         error: 'Cannot delete file assigned to a student',
@@ -2180,31 +2147,34 @@ app.delete('/api/uploaded-files/:id', async (req, res) => {
       });
     }
 
+    console.log('=== DELETING FILE FROM LOCAL STORAGE AND DATABASE ===');
+    console.log('File ID:', id);
+    console.log('Filename:', fileToDelete.filename);
+    console.log('Clone Name:', fileToDelete.cloneName);
 
-    // Delete from S3 first
+    // Delete from local storage first
     try {
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: process.env.S3_BUCKET_NAME,
-        Key: fileToDelete.filename
-      });
-
-      await s3Client.send(deleteCommand);
-      console.log('Successfully deleted file from S3:', fileToDelete.filename);
-    } catch (s3Error) {
-      console.error('Error deleting from S3 (continuing with database deletion):', s3Error);
-      // Continue with database deletion even if S3 deletion fails
-      // This prevents orphaned database records
+      const filePath = path.join(__dirname, 'uploads', fileToDelete.filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('Successfully deleted file from local storage:', fileToDelete.filename);
+      }
+    } catch (localError) {
+      console.error('Error deleting from local storage (continuing with database deletion):', localError);
     }
 
-    // Delete from database
+    // Continue with database deletion...
     await prisma.uploadedFile.delete({
       where: { id: parseInt(id) }
     });
 
-    console.log('Successfully deleted file from database');
-    res.status(204).send();
+    res.json({
+      message: 'File deleted successfully',
+      deletedFile: fileToDelete.cloneName
+    });
+
   } catch (error) {
-    console.error('Delete error:', error);
+    console.error('Error deleting file:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -4208,7 +4178,7 @@ app.get('/api/practice-submissions', async (req, res) => {
       // Only include teacher-reviewed items for directors
       if (includeTeacherReviewed === 'true') {
         reviewStatuses.push(CLONE_STATUSES.REVIEWED_BY_TEACHER);
-       // console.log('✅ Including REVIEWED_BY_TEACHER status for directors (practice)');
+        // console.log('✅ Including REVIEWED_BY_TEACHER status for directors (practice)');
       } else {
         console.log('❌ NOT including REVIEWED_BY_TEACHER status (instructor view - practice)');
       }
@@ -4387,6 +4357,7 @@ app.put('/api/practice-submissions/:id/review', validateStatusMiddleware, async 
 //Practice clone download endpoint
 //Practice clone download endpoint with enhanced debugging
 //Stream from S3
+// REPLACE the practice clone download endpoint:
 app.get('/api/practice-clones/:id/download', async (req, res) => {
   try {
     const { id } = req.params;
@@ -4399,31 +4370,22 @@ app.get('/api/practice-clones/:id/download', async (req, res) => {
       return res.status(404).json({ error: 'Practice clone not found' });
     }
 
-    console.log('=== PRACTICE CLONE S3 DOWNLOAD DEBUG ===');
+    console.log('=== PRACTICE CLONE LOCAL DOWNLOAD ===');
     console.log('Practice Clone ID:', id);
-    console.log('S3 Key:', practiceClone.filename);
+    console.log('Filename:', practiceClone.filename);
     console.log('Original name:', practiceClone.originalName);
 
-    // Get the file from S3
-    const getObjectCommand = new GetObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: practiceClone.filename
-    });
+    const filePath = path.join(__dirname, 'uploads', practiceClone.filename);
 
-    const s3Response = await s3Client.send(getObjectCommand);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Practice clone file not found on disk' });
+    }
 
-    // Set the appropriate headers for file download
-    res.setHeader('Content-Type', s3Response.ContentType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${practiceClone.originalName}"`);
-    res.setHeader('Content-Length', s3Response.ContentLength);
-
-    console.log('Streaming practice clone file from S3...');
-
-    // Stream the file from S3 to the client
-    s3Response.Body.pipe(res);
+    res.sendFile(filePath);
 
   } catch (error) {
-    console.error('Practice clone S3 download error:', error.message);
+    console.error('Practice clone download error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -6523,14 +6485,9 @@ app.post('/api/practice-clones/bulk-upload', upload.array('files'), authenticate
           // Upload file to S3 with the practice clone's expected filename
           const key = matchedClone.filename;
 
-          const putCommand = new PutObjectCommand({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: key,
-            Body: file.buffer,
-            ContentType: 'application/octet-stream'
-          });
-
-          await s3Client.send(putCommand);
+          const filePath = path.join(__dirname, 'uploads', matchedClone.filename);
+          fs.writeFileSync(filePath, file.buffer);
+          console.log('Saved file locally:', filePath);
 
           // Update the practice clone record if needed
           await prisma.practiceClone.update({
@@ -8056,19 +8013,19 @@ app.get('/api/bug-reports', authenticateToken, async (req, res) => {
     }
 
     const { status, urgency, page = 1, limit = 20, sortBy = 'created', sortOrder = 'desc' } = req.query;
-    
+
     const where = {};
     if (status && status !== 'all') where.status = status;
     if (urgency && urgency !== 'all') where.urgency = urgency;
-    
+
     // Build orderBy based on sortBy parameter
     let orderBy = [];
-    
+
     switch (sortBy) {
       case 'created':
         orderBy.push({ createdAt: sortOrder });
         break;
-        
+
       case 'urgency':
         // For urgency, we need custom ordering since it's a string
         if (sortOrder === 'desc') {
@@ -8081,18 +8038,18 @@ app.get('/api/bug-reports', authenticateToken, async (req, res) => {
         // Add secondary sort by creation date
         orderBy.push({ createdAt: 'desc' });
         break;
-        
+
       case 'status':
         orderBy.push({ status: sortOrder });
         // Add secondary sort by creation date
         orderBy.push({ createdAt: 'desc' });
         break;
-        
+
       default:
         // Fallback to creation date
         orderBy.push({ createdAt: 'desc' });
     }
-    
+
     const bugReports = await prisma.bugReport.findMany({
       where,
       include: {
@@ -8111,25 +8068,25 @@ app.get('/api/bug-reports', authenticateToken, async (req, res) => {
     // For urgency sorting, we need to do custom ordering since Prisma doesn't handle enum-like sorting well
     let sortedBugReports = bugReports;
     if (sortBy === 'urgency') {
-      const urgencyOrder = sortOrder === 'desc' 
+      const urgencyOrder = sortOrder === 'desc'
         ? { 'high': 3, 'medium': 2, 'low': 1 }
         : { 'high': 1, 'medium': 2, 'low': 3 };
-        
+
       sortedBugReports = bugReports.sort((a, b) => {
         const aValue = urgencyOrder[a.urgency] || 0;
         const bValue = urgencyOrder[b.urgency] || 0;
-        
+
         if (aValue !== bValue) {
           return sortOrder === 'desc' ? bValue - aValue : aValue - bValue;
         }
-        
+
         // Secondary sort by creation date (newest first)
         return new Date(b.createdAt) - new Date(a.createdAt);
       });
     }
 
     const total = await prisma.bugReport.count({ where });
-    
+
     res.json({
       bugReports: sortedBugReports,
       pagination: {
@@ -8150,7 +8107,7 @@ app.post('/api/bug-reports/submit', authenticateToken, async (req, res) => {
   try {
     const { description, steps, urgency, browserInfo, consoleOutput } = req.body;
     const userId = req.user.userId;
-    
+
     const bugReport = await prisma.bugReport.create({
       data: {
         title: `Bug Report #${Date.now()}`,
@@ -8171,7 +8128,7 @@ app.post('/api/bug-reports/submit', authenticateToken, async (req, res) => {
         }
       }
     });
-    
+
     res.json({ success: true, id: bugReport.id });
   } catch (error) {
     console.error('Error creating bug report:', error);
@@ -8187,7 +8144,7 @@ app.patch('/api/bug-reports/:id', authenticateToken, async (req, res) => {
 
     const { id } = req.params;
     const { status, resolution, assignedToId } = req.body;
-    
+
     const updateData = {};
     if (status) updateData.status = status;
     if (resolution !== undefined) updateData.resolution = resolution;
@@ -8195,7 +8152,7 @@ app.patch('/api/bug-reports/:id', authenticateToken, async (req, res) => {
     if (status === 'resolved' || status === 'closed') {
       updateData.resolvedAt = new Date();
     }
-    
+
     const bugReport = await prisma.bugReport.update({
       where: { id: parseInt(id) },
       data: updateData,
@@ -8204,7 +8161,7 @@ app.patch('/api/bug-reports/:id', authenticateToken, async (req, res) => {
         assignedTo: { select: { name: true, email: true } }
       }
     });
-    
+
     res.json(bugReport);
   } catch (error) {
     console.error('Error updating bug report:', error);
