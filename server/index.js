@@ -23,11 +23,6 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret'; // Use a secure secret in production
 const IPINFO_TOKEN = process.env.IPINFO_TOKEN;
 
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { group } = require('console');
-
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
@@ -605,61 +600,7 @@ const requireRole = (roles) => {
 
 // Test S3 connection endpoint
 // Enhanced S3 test endpoint with deletion test
-app.get('/api/test-s3', async (req, res) => {
-  try {
-    const testKey = `test-${Date.now()}.txt`;
-    const testContent = 'S3 connection test';
 
-    console.log('Testing S3 connection...');
-    console.log('Bucket:', process.env.S3_BUCKET_NAME);
-    console.log('Region:', process.env.S3_REGION);
-
-    // Test upload
-    const putCommand = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: testKey,
-      Body: testContent,
-      ContentType: 'text/plain'
-    });
-
-    await s3Client.send(putCommand);
-    console.log('✅ Successfully uploaded test file');
-
-    // Test download (generate presigned URL)
-    const downloadUrl = await generatePresignedDownloadUrl(testKey, 'test.txt', 60);
-    console.log('✅ Successfully generated presigned URL');
-
-    // Test deletion
-    const deleteCommand = new DeleteObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: testKey
-    });
-
-    await s3Client.send(deleteCommand);
-    console.log('✅ Successfully deleted test file');
-
-    res.json({
-      success: true,
-      message: 'S3 connection working perfectly! Upload, download, and delete all tested successfully.',
-      tests: {
-        upload: '✅ Success',
-        download: '✅ Success',
-        delete: '✅ Success'
-      },
-      bucket: process.env.S3_BUCKET_NAME,
-      region: process.env.S3_REGION,
-      downloadUrl: downloadUrl.substring(0, 100) + '...' // Show partial URL for verification
-    });
-  } catch (error) {
-    console.error('S3 test error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      bucket: process.env.S3_BUCKET_NAME,
-      region: process.env.S3_REGION
-    });
-  }
-});
 
 
 // Test route
@@ -7659,8 +7600,7 @@ app.post('/api/blast-search/:fileId/:questionId', async (req, res) => {
       analysisData.cachedBlastResults = {};
     }
 
-    // SINGLE crypto require (move to top of function)
-    const crypto = require('crypto');
+   
 
     // Handle polling requests (when frontend is checking for completed results)
     if (!forceRefresh && (!sequence || sequence === "dummy" || sequence.length < 10)) {
