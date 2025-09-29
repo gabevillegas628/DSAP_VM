@@ -24,9 +24,12 @@ class InstanceManager {
     }
 
     async main() {
-        console.log('🧬 DNA Analysis Instance Manager');
-        console.log('================================');
+    console.log('DNA Analysis Instance Manager');
+    console.log('================================');
 
+    let running = true;
+
+    while (running) {
         const instances = this.getInstances();
 
         console.log('\nChoose an action:');
@@ -34,10 +37,10 @@ class InstanceManager {
         console.log('2. Manage existing instances');
         console.log('3. Quick status check');
         console.log('4. View logs (non-streaming)');
-        console.log('5. Start/Stop Instances');  // ADD THIS LINE
-        console.log('6. Exit');                     // UPDATE NUMBER
+        console.log('5. Start/Stop Instances');
+        console.log('6. Exit');
 
-        const choice = await this.question('\nEnter choice (1-6): '); // UPDATE RANGE
+        const choice = await this.question('\nEnter choice (1-6): ');
 
         switch (choice) {
             case '1':
@@ -57,13 +60,21 @@ class InstanceManager {
                 break;
             case '6':
                 console.log('Goodbye!');
+                running = false;  // Exit the loop
                 break;
             default:
                 console.log('Invalid choice');
         }
 
-        rl.close();
+        // Optional: add a small pause between iterations
+        if (running) {
+            console.log('\nPress Enter to continue...');
+            await this.question('');
+        }
     }
+
+    rl.close();
+}
 
     getInstances() {
         if (!fs.existsSync(this.instancesDir)) {
