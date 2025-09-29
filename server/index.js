@@ -1867,7 +1867,7 @@ app.post('/api/uploaded-files', upload.array('files'), async (req, res) => {
 
       const uploadedFile = await prisma.uploadedFile.create({
         data: {
-          filename: file.key, // S3 key instead of local filename
+          filename: file.filename, // LOCAL filename (not file.key)
           originalName: file.originalname,
           cloneName: cloneName,
           size: (file.size / 1024).toFixed(1) + ' KB',
@@ -3990,7 +3990,7 @@ app.post('/api/practice-clones/upload', upload.array('files'), async (req, res) 
       const practiceClone = await prisma.practiceClone.create({
         data: {
           cloneName: cloneName,
-          filename: file.key, // S3 key instead of local filename
+          filename: file.filename, // S3 key instead of local filename
           originalName: file.originalname,
           description: `Practice clone: ${cloneName}`,
           isActive: true
