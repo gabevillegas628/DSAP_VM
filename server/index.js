@@ -5645,7 +5645,6 @@ app.post('/api/import-v2', importUpload.single('file'), async (req, res) => {
 
         for (const question of importData.analysisContent.questions) {
           try {
-            // Try to find existing question by step, order, and text
             const existingQuestion = await prisma.analysisQuestion.findFirst({
               where: {
                 step: question.step,
@@ -5671,14 +5670,12 @@ app.post('/api/import-v2', importUpload.single('file'), async (req, res) => {
               };
 
               if (existingQuestion) {
-                // Update existing
                 await prisma.analysisQuestion.update({
                   where: { id: existingQuestion.id },
                   data: questionData
                 });
                 questionIdMapping.set(question.id, existingQuestion.id);
               } else {
-                // Create new
                 const newQuestion = await prisma.analysisQuestion.create({
                   data: questionData
                 });
@@ -5692,8 +5689,56 @@ app.post('/api/import-v2', importUpload.single('file'), async (req, res) => {
           }
         }
 
+        // ADD THIS NEW SECTION - Second pass to fix conditional logic
+        console.log('Updating conditional logic references...');
+        let conditionalLogicUpdated = 0;
+
+        for (const question of importData.analysisContent.questions) {
+          if (question.conditionalLogic && question.conditionalLogic.showIf) {
+            const oldDependentQuestionId = question.conditionalLogic.showIf.questionId;
+            const newDependentQuestionId = questionIdMapping.get(oldDependentQuestionId);
+
+            if (newDependentQuestionId) {
+              // Get the new ID for this question
+              const newQuestionId = questionIdMapping.get(question.id);
+
+              if (newQuestionId) {
+                try {
+                  // Update the conditional logic with the new question ID reference
+                  const updatedConditionalLogic = {
+                    showIf: {
+                      questionId: newDependentQuestionId,
+                      answer: question.conditionalLogic.showIf.answer
+                    }
+                  };
+
+                  await prisma.analysisQuestion.update({
+                    where: { id: newQuestionId },
+                    data: {
+                      conditionalLogic: JSON.stringify(updatedConditionalLogic)
+                    }
+                  });
+
+                  conditionalLogicUpdated++;
+                } catch (error) {
+                  console.error(`Error updating conditional logic for question ${question.text}:`, error);
+                  results.errors.push(`Conditional logic update for "${question.text}": ${error.message}`);
+                }
+              }
+            } else {
+              console.warn(`Warning: Could not find mapping for dependent question ID ${oldDependentQuestionId}`);
+              results.errors.push(`Question "${question.text}": Could not map conditional logic dependency`);
+            }
+          }
+        }
+
+        console.log(`Updated conditional logic for ${conditionalLogicUpdated} questions`);
+
         if (questionsImported > 0) results.imported.analysisQuestions = `${questionsImported} questions imported`;
         if (questionsSkipped > 0) results.skipped.analysisQuestions = `${questionsSkipped} questions skipped`;
+        if (conditionalLogicUpdated > 0) {
+          results.imported.analysisQuestions += ` (${conditionalLogicUpdated} conditional logic updated)`;
+        }
       }
 
       // STEP 2: Import Master Help Topics with Enhanced Validation
@@ -6198,7 +6243,7 @@ app.get('/api/practice-clones/missing-files', authenticateToken, requireRole(['d
         // Method 1: Check the exact filename from database in local storage
         if (clone.filename) {
           const filePath = path.join(__dirname, 'uploads', clone.filename);
-          
+
           if (fs.existsSync(filePath)) {
             fileExists = true;
             actualFilename = clone.filename;
@@ -6215,7 +6260,7 @@ app.get('/api/practice-clones/missing-files', authenticateToken, requireRole(['d
           console.log(`Exact filename not found for ${clone.cloneName}, searching for alternatives...`);
 
           const uploadsDir = path.join(__dirname, 'uploads');
-          
+
           // Check if uploads directory exists
           if (fs.existsSync(uploadsDir)) {
             const allFiles = fs.readdirSync(uploadsDir);
@@ -7582,7 +7627,7 @@ app.post('/api/blast-search/:fileId/:questionId', async (req, res) => {
       analysisData.cachedBlastResults = {};
     }
 
-   
+
 
     // Handle polling requests (when frontend is checking for completed results)
     if (!forceRefresh && (!sequence || sequence === "dummy" || sequence.length < 10)) {
