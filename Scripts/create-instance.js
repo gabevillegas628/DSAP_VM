@@ -34,7 +34,7 @@ class InstanceManager {
         console.log('2. Manage existing instances');
         console.log('3. Quick status check');
         console.log('4. View logs (non-streaming)');
-        console.log('5. Resurrect all instances');  // ADD THIS LINE
+        console.log('5. Start/Stop Instances');  // ADD THIS LINE
         console.log('6. Exit');                     // UPDATE NUMBER
 
         const choice = await this.question('\nEnter choice (1-6): '); // UPDATE RANGE
@@ -52,10 +52,10 @@ class InstanceManager {
             case '4':
                 await this.viewLogs();
                 break;
-            case '5':                              // ADD THIS CASE
-                await this.resurrectAllInstances();
+            case '5':
+                await this.resurrectMenu();
                 break;
-            case '6':                              // UPDATE NUMBER
+            case '6':                              
                 console.log('Goodbye!');
                 break;
             default:
@@ -684,55 +684,214 @@ createDirector();
         }
     }
 
-    async resurrectAllInstances() {
-        console.log('🔄 Starting all instances after server restart...');
+    async resurrectMenu() {
+    console.log('\n🔄 Instance Resurrection Menu');
+    console.log('============================');
+    
+    console.log('1. Resurrect all instances');
+    console.log('2. Resurrect specific instances');
+    console.log('3. Stop specific instances');
+    console.log('4. Cancel');
+    
+    const choice = await this.question('\nEnter choice (1-4): ');
+    
+    switch (choice) {
+        case '1':
+            await this.resurrectAllInstances();
+            break;
+        case '2':
+            await this.resurrectSpecificInstances();
+            break;
+        case '3':
+            await this.stopSpecificInstances();
+            break;
+        case '4':
+            console.log('Cancelled.');
+            break;
+        default:
+            console.log('Invalid choice.');
+    }
+}
 
-        const instances = this.getInstances();
+async resurrectSpecificInstances() {
+    const instances = this.getInstances();
 
-        if (instances.length === 0) {
-            console.log('No instances found to resurrect.');
-            return;
-        }
+    if (instances.length === 0) {
+        console.log('No instances found.');
+        return;
+    }
 
-        console.log(`Found ${instances.length} instances: ${instances.join(', ')}`);
+    console.log('\n📋 Available Instances:');
+    instances.forEach((instance, index) => {
+        const status = this.getInstanceStatus(instance);
+        const config = this.getInstanceConfig(instance);
+        const port = config?.port || 'unknown';
+        console.log(`${index + 1}. ${instance} (Port: ${port}) - ${status}`);
+    });
 
-        let started = 0;
-        let failed = 0;
+    console.log('\nEnter instance numbers to start (comma-separated, e.g. "1,3,5"):');
+    const input = await this.question('Instances: ');
+    
+    if (!input.trim()) {
+        console.log('No instances selected.');
+        return;
+    }
 
-        for (const instanceName of instances) {
-            const config = this.getInstanceConfig(instanceName);
-            if (config && config.paths && config.paths.server) {
-                try {
-                    // Check if already running
-                    const status = this.getInstanceStatus(instanceName);
-                    if (status === 'online') {
-                        console.log(`   ⚡ ${instanceName} already running`);
-                        continue;
-                    }
+    const selectedIndices = input.split(',')
+        .map(s => parseInt(s.trim()) - 1)
+        .filter(i => i >= 0 && i < instances.length);
 
-                    // Configure firewall (in case rules were lost)
-                    await this.configureFirewall(config.port);
+    if (selectedIndices.length === 0) {
+        console.log('No valid instances selected.');
+        return;
+    }
 
-                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
-                    console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
-                    started++;
-                } catch (error) {
-                    console.log(`   ❌ Failed to start ${instanceName}: ${error.message}`);
-                    failed++;
+    let started = 0;
+    let failed = 0;
+
+    for (const index of selectedIndices) {
+        const instanceName = instances[index];
+        const config = this.getInstanceConfig(instanceName);
+        
+        if (config && config.paths && config.paths.server) {
+            try {
+                const status = this.getInstanceStatus(instanceName);
+                
+                if (status === 'online') {
+                    console.log(`   ⚡ ${instanceName} already running`);
+                    continue;
                 }
-            } else {
-                console.log(`   ⚠️  No valid config found for ${instanceName}`);
+
+                await this.configureFirewall(config.port);
+                
+                execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+                console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
+                started++;
+            } catch (error) {
+                console.log(`   ❌ Failed to start ${instanceName}: ${error.message}`);
                 failed++;
             }
-        }
-
-        if (started > 0) {
-            execSync('pm2 save', { stdio: 'pipe' });
-            console.log(`\n🎉 Resurrection complete: ${started} started, ${failed} failed`);
         } else {
-            console.log('\nNo instances needed to be started');
+            console.log(`   ⚠️  No valid config found for ${instanceName}`);
+            failed++;
         }
     }
+
+    if (started > 0) {
+        execSync('pm2 save', { stdio: 'pipe' });
+        console.log(`\n🎉 Complete: ${started} started, ${failed} failed`);
+    }
+}
+
+async stopSpecificInstances() {
+    const instances = this.getInstances();
+
+    if (instances.length === 0) {
+        console.log('No instances found.');
+        return;
+    }
+
+    console.log('\n📋 Available Instances:');
+    instances.forEach((instance, index) => {
+        const status = this.getInstanceStatus(instance);
+        const config = this.getInstanceConfig(instance);
+        const port = config?.port || 'unknown';
+        console.log(`${index + 1}. ${instance} (Port: ${port}) - ${status}`);
+    });
+
+    console.log('\nEnter instance numbers to stop (comma-separated, e.g. "1,3,5"):');
+    const input = await this.question('Instances: ');
+    
+    if (!input.trim()) {
+        console.log('No instances selected.');
+        return;
+    }
+
+    const selectedIndices = input.split(',')
+        .map(s => parseInt(s.trim()) - 1)
+        .filter(i => i >= 0 && i < instances.length);
+
+    if (selectedIndices.length === 0) {
+        console.log('No valid instances selected.');
+        return;
+    }
+
+    let stopped = 0;
+    let failed = 0;
+
+    for (const index of selectedIndices) {
+        const instanceName = instances[index];
+        
+        try {
+            const status = this.getInstanceStatus(instanceName);
+            
+            if (status !== 'online') {
+                console.log(`   ⚡ ${instanceName} already stopped`);
+                continue;
+            }
+
+            execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
+            console.log(`   ✅ Stopped ${instanceName}`);
+            stopped++;
+        } catch (error) {
+            console.log(`   ❌ Failed to stop ${instanceName}: ${error.message}`);
+            failed++;
+        }
+    }
+
+    if (stopped > 0) {
+        execSync('pm2 save', { stdio: 'pipe' });
+        console.log(`\n🎉 Complete: ${stopped} stopped, ${failed} failed`);
+    }
+}
+
+async resurrectAllInstances() {
+    console.log('🔄 Starting all instances after server restart...');
+
+    const instances = this.getInstances();
+
+    if (instances.length === 0) {
+        console.log('No instances found to resurrect.');
+        return;
+    }
+
+    console.log(`Found ${instances.length} instances: ${instances.join(', ')}`);
+
+    let started = 0;
+    let failed = 0;
+
+    for (const instanceName of instances) {
+        const config = this.getInstanceConfig(instanceName);
+        if (config && config.paths && config.paths.server) {
+            try {
+                const status = this.getInstanceStatus(instanceName);
+                if (status === 'online') {
+                    console.log(`   ⚡ ${instanceName} already running`);
+                    continue;
+                }
+
+                await this.configureFirewall(config.port);
+
+                execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+                console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
+                started++;
+            } catch (error) {
+                console.log(`   ❌ Failed to start ${instanceName}: ${error.message}`);
+                failed++;
+            }
+        } else {
+            console.log(`   ⚠️  No valid config found for ${instanceName}`);
+            failed++;
+        }
+    }
+
+    if (started > 0) {
+        execSync('pm2 save', { stdio: 'pipe' });
+        console.log(`\n🎉 Resurrection complete: ${started} started, ${failed} failed`);
+    } else {
+        console.log('\nNo instances needed to be started');
+    }
+}
 
     generatePassword() {
         return Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
