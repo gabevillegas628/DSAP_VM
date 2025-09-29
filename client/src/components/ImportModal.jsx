@@ -195,7 +195,10 @@ const ImportModal = ({ isOpen, onClose, onImportComplete }) => {
     const hasDataSelected = Object.values(importData).some(value => value);
 
     const renderDataSection = (title, icon, items) => {
-        const availableItems = items.filter(item => getDataTypeCount(item.key) > 0);
+        const availableItems = items.filter(item => {
+            const count = getDataTypeCount(item.key);
+            return count && count !== 0;
+        });
         if (availableItems.length === 0) return null;
 
         return (
