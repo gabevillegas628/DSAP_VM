@@ -125,6 +125,7 @@ class InstanceManager {
             await this.runMigrations(instanceName);
             await this.createDirectorAccount(instanceName, directorName, directorEmail, finalPassword);
             await this.buildFrontend(instanceName);
+            await this.configureFirewall(port);
             await this.startInstance(instanceName, port);
 
             console.log('\n🎉 Instance created successfully!');
@@ -479,6 +480,29 @@ INSTANCE_NAME=${instanceName}
         }
     }
 
+    async configureFirewall(port) {
+    console.log(`   🔥 Configuring firewall for port ${port}...`);
+    
+    try {
+        // Check if UFW is installed and active
+        const ufwStatus = execSync('sudo ufw status', { encoding: 'utf8' });
+        
+        if (ufwStatus.includes('Status: inactive')) {
+            console.log('   ℹ️  UFW is inactive, skipping firewall configuration');
+            return;
+        }
+        
+        // Add the firewall rule
+        execSync(`sudo ufw allow ${port}/tcp`, { stdio: 'pipe' });
+        console.log(`   ✅ Firewall rule added for port ${port}`);
+        
+    } catch (error) {
+        // UFW might not be installed or user might not have sudo access
+        console.log(`   ⚠️  Could not configure firewall: ${error.message}`);
+        console.log(`   💡 Manually run: sudo ufw allow ${port}`);
+    }
+}
+
     async createDirectorAccount(instanceName, name, email, password) {
         console.log('   👤 Creating director account...');
 
@@ -685,6 +709,9 @@ createDirector();
                         console.log(`   ⚡ ${instanceName} already running`);
                         continue;
                     }
+
+                    // Configure firewall (in case rules were lost)
+                    await this.configureFirewall(config.port);
 
                     execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
