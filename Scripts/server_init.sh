@@ -20,39 +20,40 @@ echo "+Configuring PgBouncer..."
 # Backup original config
 sudo cp /etc/pgbouncer/pgbouncer.ini /etc/pgbouncer/pgbouncer.ini.backup
 
-# Write new pgbouncer.ini using heredoc
+# Set PostgreSQL to use scram-sha-256
+sudo -u postgres psql -c "ALTER SYSTEM SET password_encryption = 'scram-sha-256';"
+
+# Add trust rules for PgBouncer (both IPv4 and IPv6)
+PG_HBA=$(sudo find /etc/postgresql -name pg_hba.conf)
+sudo sed -i '/^# TYPE/a host    all    postgres    127.0.0.1/32    trust' "$PG_HBA"
+sudo sed -i '/^# TYPE/a host    all    postgres    ::1/128         trust' "$PG_HBA"
+
+sudo systemctl reload postgresql
+
+# Write pgbouncer.ini with auth_query
 sudo tee /etc/pgbouncer/pgbouncer.ini > /dev/null << 'EOF'
 [databases]
 ; Databases will be added here by the instance creation script
-; Format: dbname = host=localhost port=5432 dbname=actual_dbname
 
 [pgbouncer]
-listen_addr = 127.0.0.1
+listen_addr = *
 listen_port = 6432
-auth_type = md5
-auth_file = /etc/pgbouncer/userlist.txt
-pool_mode = transaction
+auth_type = scram-sha-256
+auth_user = postgres
+auth_query = SELECT usename, passwd FROM pg_shadow WHERE usename=$1
+pool_mode = session
 max_client_conn = 1000
 default_pool_size = 20
 min_pool_size = 5
 reserve_pool_size = 5
 reserve_pool_timeout = 3
-server_idle_timeout = 600
 logfile = /var/log/postgresql/pgbouncer.log
 pidfile = /var/run/postgresql/pgbouncer.pid
-admin_users = postgres
 EOF
 
-# Initialize empty userlist.txt (databases will add their users)
-sudo tee /etc/pgbouncer/userlist.txt > /dev/null << 'EOF'
-; Users will be added here by the instance creation script
-; Format: "username" "md5<hash>"
-EOF
-
-# Set proper permissions
 sudo chown postgres:postgres /etc/pgbouncer/pgbouncer.ini
-sudo chown postgres:postgres /etc/pgbouncer/userlist.txt
-sudo chmod 640 /etc/pgbouncer/userlist.txt
+sudo systemctl restart pgbouncer
+sudo systemctl enable pgbouncer
 
 # Start and enable PgBouncer
 echo "+Starting PgBouncer..."

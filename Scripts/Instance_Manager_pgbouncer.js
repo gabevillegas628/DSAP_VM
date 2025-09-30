@@ -390,14 +390,7 @@ class InstanceManager {
             // Use sed to insert after the [databases] line
             execSync(`sudo sed -i '/^\\[databases\\]/a ${dbEntry}' /etc/pgbouncer/pgbouncer.ini`, { stdio: 'pipe' });
 
-            // Generate MD5 hash for userlist.txt
-            const crypto = require('crypto');
-            const hash = crypto.createHash('md5')
-                .update(dbPassword + dbUser)
-                .digest('hex');
-
-            const userEntry = `"${dbUser}" "md5${hash}"`;
-            execSync(`echo '${userEntry}' | sudo tee -a /etc/pgbouncer/userlist.txt`, { stdio: 'pipe' });
+            // NO userlist.txt management needed with auth_query!
 
             // Reload PgBouncer to pick up new config
             execSync('sudo systemctl reload pgbouncer', { stdio: 'pipe' });
@@ -774,8 +767,7 @@ createDirector();
             // Remove database entry from pgbouncer.ini
             execSync(`sudo sed -i '/${dbName} =/d' /etc/pgbouncer/pgbouncer.ini`, { stdio: 'pipe' });
 
-            // Remove user entry from userlist.txt
-            execSync(`sudo sed -i '/"${dbUser}"/d' /etc/pgbouncer/userlist.txt`, { stdio: 'pipe' });
+            // NO userlist.txt removal needed with auth_query!
 
             // Reload PgBouncer
             execSync('sudo systemctl reload pgbouncer', { stdio: 'pipe' });
