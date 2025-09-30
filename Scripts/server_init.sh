@@ -41,7 +41,7 @@ listen_port = 6432
 auth_type = scram-sha-256
 auth_user = postgres
 auth_query = SELECT usename, passwd FROM pg_shadow WHERE usename=$1
-pool_mode = session
+pool_mode = transaction
 max_client_conn = 1000
 default_pool_size = 20
 min_pool_size = 5

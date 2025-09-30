@@ -450,7 +450,7 @@ INSTANCE_NAME=${instanceName}
                 host: 'localhost',
                 port: 6432,  // PgBouncer port for runtime
                 directPort: 5432,  // Direct PostgreSQL for setup
-                url: `postgresql://${dbUser}:${dbPassword}@localhost:6432/${dbName}`,  // Runtime URL (PgBouncer)
+                url: `postgresql://${dbUser}:${dbPassword}@localhost:6432/${dbName}?pgbouncer=true`,  // Runtime URL (PgBouncer)
                 directUrl: `postgresql://${dbUser}:${dbPassword}@localhost:5432/${dbName}`  // Setup URL (direct)
             };
 
