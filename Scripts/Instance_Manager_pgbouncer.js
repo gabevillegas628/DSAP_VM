@@ -175,6 +175,7 @@ class InstanceManager {
             await this.installDependencies(instanceName);
             await this.runMigrations(instanceName);
             await this.createDirectorAccount(instanceName, directorName, directorEmail, finalPassword);
+            await this.switchToPgBouncer(instanceName);
             await this.buildFrontend(instanceName);
             await this.configureFirewall(port);
             await this.startInstance(instanceName, port);
@@ -406,6 +407,29 @@ class InstanceManager {
         }
     }
 
+    async switchToPgBouncer(instanceName) {
+        console.log('   🔄 Switching to PgBouncer connection...');
+
+        const instanceDir = path.join(this.instancesDir, instanceName);
+        const serverDir = path.join(instanceDir, 'server');
+        const dbConfig = JSON.parse(
+            fs.readFileSync(path.join(instanceDir, 'db-config.json'), 'utf8')
+        );
+
+        const serverEnv = `
+DATABASE_URL="${dbConfig.url}"
+DIRECT_URL="${dbConfig.directUrl}"
+PORT=${this.getInstanceConfig(instanceName).port}
+NODE_ENV=production
+HOST=0.0.0.0
+${this.getEmailConfig()}
+INSTANCE_NAME=${instanceName}
+`.trim();
+
+        fs.writeFileSync(path.join(serverDir, '.env'), serverEnv);
+        console.log('   ✅ Switched to PgBouncer connection');
+    }
+
     async createDatabase(instanceName) {
         console.log('   📊 Creating database...');
 
@@ -429,8 +453,10 @@ class InstanceManager {
                 user: dbUser,
                 password: dbPassword,
                 host: 'localhost',
-                port: 6432,  // Changed from 5432 to 6432 (PgBouncer)
-                url: `postgresql://${dbUser}:${dbPassword}@localhost:6432/${dbName}`  // Use PgBouncer port
+                port: 6432,  // PgBouncer port for runtime
+                directPort: 5432,  // Direct PostgreSQL for setup
+                url: `postgresql://${dbUser}:${dbPassword}@localhost:6432/${dbName}`,  // Runtime URL (PgBouncer)
+                directUrl: `postgresql://${dbUser}:${dbPassword}@localhost:5432/${dbName}`  // Setup URL (direct)
             };
 
             if (!fs.existsSync(this.instancesDir)) {
@@ -474,7 +500,8 @@ class InstanceManager {
         fs.mkdirSync(path.join(uploadsDir, 'profile-pics'), { recursive: true });
 
         const serverEnv = `
-DATABASE_URL="${dbConfig.url}"
+DATABASE_URL="${dbConfig.directUrl}"
+DIRECT_URL="${dbConfig.directUrl}"
 PORT=${port}
 NODE_ENV=production
 HOST=0.0.0.0
