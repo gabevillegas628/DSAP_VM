@@ -810,10 +810,11 @@ createDirector();
 
         console.log('1. Resurrect all instances');
         console.log('2. Resurrect specific instances');
-        console.log('3. Stop specific instances');
-        console.log('4. Cancel');
+        console.log('3. Resurrect with port change'); 
+        console.log('4. Stop specific instances');
+        console.log('5. Cancel');
 
-        const choice = await this.question('\nEnter choice (1-4): ');
+        const choice = await this.question('\nEnter choice (1-5): ');
 
         switch (choice) {
             case '1':
@@ -823,13 +824,121 @@ createDirector();
                 await this.resurrectSpecificInstances();
                 break;
             case '3':
-                await this.stopSpecificInstances();
+                await this.resurrectWithPortChange();  
                 break;
             case '4':
+                await this.stopSpecificInstances();
+                break;
+            case '5':
                 console.log('Cancelled.');
                 break;
             default:
                 console.log('Invalid choice.');
+        }
+    }
+
+    async resurrectWithPortChange() {
+        const instances = this.getInstances();
+
+        if (instances.length === 0) {
+            console.log('No instances found.');
+            return;
+        }
+
+        console.log('\n📋 Available Instances:');
+        instances.forEach((instance, index) => {
+            const status = this.getInstanceStatus(instance);
+            const config = this.getInstanceConfig(instance);
+            const port = config?.port || 'unknown';
+            console.log(`${index + 1}. ${instance} (Current Port: ${port}) - ${status}`);
+        });
+
+        const choice = await this.question('\nEnter instance number: ');
+        const index = parseInt(choice) - 1;
+
+        if (index < 0 || index >= instances.length) {
+            console.log('Invalid instance number.');
+            return;
+        }
+
+        const instanceName = instances[index];
+        const config = this.getInstanceConfig(instanceName);
+
+        console.log(`\nCurrent port: ${config.port}`);
+        const newPortInput = await this.question('Enter new port (or press Enter to keep current): ');
+
+        if (!newPortInput.trim()) {
+            // No port change, just resurrect normally
+            await this.startInstance(instanceName, config.port);
+            console.log(`✅ Started ${instanceName} on port ${config.port}`);
+            return;
+        }
+
+        const newPort = parseInt(newPortInput);
+
+        // Validate port
+        if (isNaN(newPort) || newPort < 1024 || newPort > 65535) {
+            console.log('❌ Invalid port. Must be between 1024-65535.');
+            return;
+        }
+
+        // Check if port is available
+        const isAvailable = await this.isPortAvailable(newPort);
+        if (!isAvailable) {
+            console.log(`⚠️  Port ${newPort} is already in use.`);
+            const proceed = await this.question('Continue anyway? (y/n): ');
+            if (proceed.toLowerCase() !== 'y') {
+                return;
+            }
+        }
+
+        // Check if another instance uses this port
+        const allInstances = this.getInstances();
+        for (const inst of allInstances) {
+            if (inst === instanceName) continue;
+            const instConfig = this.getInstanceConfig(inst);
+            if (instConfig?.port === newPort) {
+                console.log(`❌ Port ${newPort} is already assigned to instance: ${inst}`);
+                return;
+            }
+        }
+
+        try {
+            console.log(`\n🔧 Changing ${instanceName} from port ${config.port} to ${newPort}...`);
+
+            // Stop instance if running
+            try {
+                execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
+            } catch (e) { }
+
+            // Update config.json
+            config.port = newPort;
+            const configPath = path.join(this.instancesDir, instanceName, 'config.json');
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+            // Update .env file
+            const serverDir = config.paths.server;
+            const envPath = path.join(serverDir, '.env');
+            let envContent = fs.readFileSync(envPath, 'utf8');
+            envContent = envContent.replace(/PORT=\d+/, `PORT=${newPort}`);
+            fs.writeFileSync(envPath, envContent);
+
+            // Configure firewall
+            await this.configureFirewall(newPort);
+
+            // Delete old PM2 process and start fresh
+            try {
+                execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+            } catch (e) { }
+
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+            execSync('pm2 save', { stdio: 'pipe' });
+
+            console.log(`✅ ${instanceName} now running on port ${newPort}`);
+            console.log(`🔗 Access at: http://localhost:${newPort}`);
+
+        } catch (error) {
+            console.log(`❌ Failed to change port: ${error.message}`);
         }
     }
 
