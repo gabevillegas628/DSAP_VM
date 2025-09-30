@@ -384,9 +384,11 @@ class InstanceManager {
         console.log('   🔌 Registering with PgBouncer...');
 
         try {
-            // Add database to pgbouncer.ini
-            const dbEntry = `${dbName} = host=localhost port=5432 dbname=${dbName}\n`;
-            execSync(`echo "${dbEntry}" | sudo tee -a /etc/pgbouncer/pgbouncer.ini`, { stdio: 'pipe' });
+            // Add database entry under [databases] section
+            const dbEntry = `${dbName} = host=localhost port=5432 dbname=${dbName}`;
+
+            // Use sed to insert after the [databases] line
+            execSync(`sudo sed -i '/^\\[databases\\]/a ${dbEntry}' /etc/pgbouncer/pgbouncer.ini`, { stdio: 'pipe' });
 
             // Generate MD5 hash for userlist.txt
             const crypto = require('crypto');
@@ -394,7 +396,7 @@ class InstanceManager {
                 .update(dbPassword + dbUser)
                 .digest('hex');
 
-            const userEntry = `"${dbUser}" "md5${hash}"\n`;
+            const userEntry = `"${dbUser}" "md5${hash}"`;
             execSync(`echo '${userEntry}' | sudo tee -a /etc/pgbouncer/userlist.txt`, { stdio: 'pipe' });
 
             // Reload PgBouncer to pick up new config
