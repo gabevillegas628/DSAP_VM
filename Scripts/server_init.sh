@@ -69,12 +69,12 @@ else
 fi
 
 # Clone repository (if not already done)
-if [ ! -d "DSAP_VM" ]; then
-    echo "+Cloning repository..."
-    git clone https://github.com/gabevillegas628/DSAP_VM.git
-else
-    echo "+Repository already exists"
-fi
+#if [ ! -d "DSAP_VM" ]; then
+#    echo "+Cloning repository..."
+#    git clone https://github.com/gabevillegas628/DSAP_VM.git
+#else
+#    echo "+Repository already exists"
+#fi
 
 # Install dependencies
 echo "+Installing Node.js dependencies..."
