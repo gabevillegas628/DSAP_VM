@@ -108,6 +108,8 @@ directories.forEach(dir => {
   }
 });
 
+const uploadsDir = path.join(__dirname, 'uploads');
+
 // Configure multer for local storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
