@@ -1935,7 +1935,7 @@ app.put('/api/uploaded-files/:id/assign', async (req, res) => {
 });
 
 // Update file status
-app.put('/api/uploaded-files/:id/status', async (req, res) => {
+app.put('/api/uploaded-files/:id/status', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -1958,8 +1958,16 @@ app.put('/api/uploaded-files/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // Validate status transition
-    if (!isValidStatusTransition(currentFile.status, status)) {
+    // Get the user making the request
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId }
+    });
+
+    // Directors can override any status - skip validation for them
+    const isDirector = user && user.role === 'director';
+
+    // Validate status transition (skip for directors)
+    if (!isDirector && !isValidStatusTransition(currentFile.status, status)) {
       console.warn(`Invalid status transition from "${currentFile.status}" to "${status}"`);
       return res.status(400).json({
         error: `Cannot change status from "${currentFile.status}" to "${status}"`,
