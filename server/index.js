@@ -2000,6 +2000,141 @@ app.put('/api/uploaded-files/:id/status', authenticateToken, async (req, res) =>
   }
 });
 
+// NCBI Submission endpoint
+app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async (req, res) => {
+  try {
+    const { fileIds, submitterInfo } = req.body;
+
+    if (!fileIds || fileIds.length === 0) {
+      return res.status(400).json({ error: 'No files selected for submission' });
+    }
+
+    console.log(`=== NCBI SUBMISSION REQUEST ===`);
+    console.log(`Files to submit: ${fileIds.length}`);
+    console.log(`Submitter: ${submitterInfo.submitterName}`);
+
+    // Fetch the files with their analysis data
+    const files = await prisma.uploadedFile.findMany({
+      where: {
+        id: { in: fileIds },
+        status: CLONE_STATUSES.TO_BE_SUBMITTED_NCBI
+      },
+      include: {
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            school: { select: { name: true } }
+          }
+        }
+      }
+    });
+
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'No valid files found for submission' });
+    }
+
+    const successful = [];
+    const failed = [];
+
+    // Process each file
+    for (const file of files) {
+      try {
+        // Parse analysis data
+        let analysisData = {};
+        try {
+          analysisData = JSON.parse(file.analysisData || '{}');
+        } catch (e) {
+          console.error(`Failed to parse analysis data for file ${file.id}`);
+        }
+
+        // Extract sequence from analysis data
+        const sequence = analysisData.answers?.editedSequence || 
+                        analysisData.answers?.trimmedSequence ||
+                        analysisData.rawSequence;
+
+        if (!sequence) {
+          failed.push({
+            fileId: file.id,
+            filename: file.filename,
+            error: 'No sequence data found'
+          });
+          continue;
+        }
+
+        // Prepare submission data for NCBI
+        const submissionData = {
+          filename: file.filename,
+          sequence: sequence,
+          organism: submitterInfo.organism,
+          isolationSource: submitterInfo.isolationSource,
+          collectionDate: submitterInfo.collectionDate,
+          country: submitterInfo.country,
+          submitter: {
+            name: submitterInfo.submitterName,
+            email: submitterInfo.submitterEmail,
+            institution: submitterInfo.submitterInstitution
+          },
+          student: {
+            name: file.assignedTo?.name,
+            school: file.assignedTo?.school?.name
+          },
+          notes: submitterInfo.notes
+        };
+
+        // TODO: Implement actual NCBI API submission here
+        // For now, we'll simulate success and log the data
+        console.log(`Would submit to NCBI:`, {
+          filename: file.filename,
+          sequenceLength: sequence.length,
+          organism: submitterInfo.organism
+        });
+
+        // Update file status to SUBMITTED_TO_NCBI
+        await prisma.uploadedFile.update({
+          where: { id: file.id },
+          data: {
+            status: CLONE_STATUSES.SUBMITTED_TO_NCBI,
+            // Store submission metadata
+            analysisData: JSON.stringify({
+              ...analysisData,
+              ncbiSubmission: {
+                submittedAt: new Date().toISOString(),
+                submitter: submitterInfo.submitterName,
+                organism: submitterInfo.organism,
+                // In real implementation, store NCBI accession number here
+                accessionNumber: null
+              }
+            })
+          }
+        });
+
+        successful.push(file.id);
+
+      } catch (error) {
+        console.error(`Error submitting file ${file.id}:`, error);
+        failed.push({
+          fileId: file.id,
+          filename: file.filename,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      successful,
+      failed,
+      message: `Successfully submitted ${successful.length} of ${fileIds.length} clones to NCBI`
+    });
+
+  } catch (error) {
+    console.error('NCBI submission error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.put('/api/uploaded-files/:id', async (req, res) => {
   try {
     const { id } = req.params;

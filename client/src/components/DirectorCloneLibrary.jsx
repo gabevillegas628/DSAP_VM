@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Download, Search, Filter, Eye, Trash2, Plus, AlertTriangle, CheckCircle, RefreshCw, FileText, Link, X } from 'lucide-react';
 import { useDNAContext } from '../context/DNAContext';
 import DirectorPracticeAnswers from './DirectorPracticeAnswers';
+import NCBISubmissionModal from './NCBISubmissionModal';
 import apiService from '../services/apiService';
 
 // Add these imports after your existing imports
@@ -51,6 +52,12 @@ const DirectorCloneLibrary = () => {
   const [bulkUploadResults, setBulkUploadResults] = useState(null);
   const [foundFiles, setFoundFiles] = useState([]);
 
+  // NEW: NCBI submission state
+  const [showNCBISubmissionModal, setShowNCBISubmissionModal] = useState(false);
+  const [selectedForNCBI, setSelectedForNCBI] = useState(new Set());
+  const [ncbiSubmissionInProgress, setNCBISubmissionInProgress] = useState(false);
+  const [ncbiSubmissionResults, setNCBISubmissionResults] = useState(null);
+
   const checkMissingFiles = async () => {
     setLoadingMissingFiles(true);
 
@@ -96,6 +103,71 @@ const DirectorCloneLibrary = () => {
   const openPracticeAnswersModal = (practiceClone) => {
     setSelectedPracticeClone(practiceClone);
     setShowPracticeAnswersModal(true);
+  };
+
+  // Add this function to get clones ready for NCBI submission
+  const getClonesReadyForNCBI = () => {
+    return uploadedFiles.filter(file =>
+      file.status === CLONE_STATUSES.TO_BE_SUBMITTED_NCBI &&
+      file.assignedTo // Only assigned files
+    );
+  };
+
+  // Toggle selection for NCBI submission
+  const toggleNCBISelection = (fileId) => {
+    setSelectedForNCBI(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fileId)) {
+        newSet.delete(fileId);
+      } else {
+        newSet.add(fileId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select all ready for NCBI
+  const selectAllForNCBI = () => {
+    const readyClones = getClonesReadyForNCBI();
+    setSelectedForNCBI(new Set(readyClones.map(f => f.id)));
+  };
+
+  // Clear NCBI selection
+  const clearNCBISelection = () => {
+    setSelectedForNCBI(new Set());
+  };
+
+  // Submit to NCBI
+  const submitToNCBI = async (submissionData) => {
+    setNCBISubmissionInProgress(true);
+    try {
+      const fileIds = Array.from(selectedForNCBI);
+
+      const response = await apiService.post('/ncbi/submit', {
+        fileIds,
+        submitterInfo: submissionData
+      });
+
+      setNCBISubmissionResults(response);
+
+      // Update local state for successfully submitted files
+      if (response.successful && response.successful.length > 0) {
+        setUploadedFiles(prev => prev.map(file =>
+          response.successful.includes(file.id)
+            ? { ...file, status: CLONE_STATUSES.SUBMITTED_TO_NCBI }
+            : file
+        ));
+      }
+
+      // Clear selection
+      setSelectedForNCBI(new Set());
+
+    } catch (error) {
+      console.error('Error submitting to NCBI:', error);
+      alert('Failed to submit to NCBI: ' + error.message);
+    } finally {
+      setNCBISubmissionInProgress(false);
+    }
   };
 
   // Functions for bulk upload modal for missing files
@@ -722,152 +794,247 @@ const DirectorCloneLibrary = () => {
         </div>
         <div className="p-6">
           {uploadMode === 'regular' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th
-                      className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
-                      onClick={() => sortTable('cloneName')}
-                    >
-                      Clone Name {sortConfig.key === 'cloneName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th
-                      className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
-                      onClick={() => sortTable('originalName')}
-                    >
-                      Original File {sortConfig.key === 'originalName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th
-                      className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
-                      onClick={() => sortTable('assignedTo')}
-                    >
-                      Assigned Student {sortConfig.key === 'assignedTo' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th
-                      className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
-                      onClick={() => sortTable('school')}
-                    >
-                      School {sortConfig.key === 'school' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th
-                      className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
-                      onClick={() => sortTable('status')}
-                    >
-                      Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Progress</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedFiles.map(file => (
-                    <tr key={file.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 font-bold text-indigo-600">{file.cloneName}</td>
-                      <td className="py-3 px-4">
-                        <button
-                          onClick={() => downloadFile(file.id, file.originalName)}
-                          className="font-mono text-sm text-blue-600 hover:text-blue-800 hover:underline cursor-pointer bg-transparent border-none p-0"
-                          title={`Download ${file.originalName}`}
-                        >
-                          {file.originalName}
-                        </button>
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        {file.assignedTo ? (
-                          <span className="text-green-700 font-medium">{file.assignedTo.name}</span>
-                        ) : (
-                          <span className="text-gray-400 italic">Unassigned</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        {file.assignedTo?.school?.name || '-'}
-                      </td>
-                      <td className="py-3 px-4">
-                        {file.assignedTo ? (
-                          <select
-                            value={file.status}
-                            onChange={(e) => updateFileStatus(file.id, e.target.value)}
-                            className={`text-xs px-2 py-1 rounded-full font-medium border-0 ${getStatusColor(file.status)}`}
-                          >
-                            {[...STATUS_DROPDOWN_OPTIONS,
-                            { value: CLONE_STATUSES.TO_BE_SUBMITTED_NCBI, label: 'To be submitted to NCBI' },
-                            { value: CLONE_STATUSES.SUBMITTED_TO_NCBI, label: 'Submitted to NCBI' },
-                            { value: CLONE_STATUSES.UNREADABLE, label: 'Unreadable' }
-                            ].map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(file.status)}`}>
-                            {file.status}
+            <>
+              {/* NCBI Submission Section - MOVE IT HERE */}
+              {getClonesReadyForNCBI().length > 0 && (
+                <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-2">
+                      <Upload className="w-5 h-5 text-indigo-600" />
+                      <h4 className="font-semibold text-indigo-900">
+                        NCBI Submission Queue
+                      </h4>
+                      <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium">
+                        {getClonesReadyForNCBI().length} ready
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {selectedForNCBI.size > 0 && (
+                        <>
+                          <span className="text-sm text-indigo-700">
+                            {selectedForNCBI.size} selected
                           </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${file.progress === 100 ? 'bg-green-600' : file.progress > 0 ? 'bg-blue-600' : 'bg-gray-400'}`}
-                              style={{ width: `${file.progress}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-xs text-gray-600">{file.progress}%</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={clearNCBISelection}
+                            className="text-sm text-indigo-600 hover:text-indigo-800"
+                          >
+                            Clear
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={selectAllForNCBI}
+                        className="px-3 py-1 text-sm bg-white border border-indigo-300 rounded hover:bg-indigo-50"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        onClick={() => setShowNCBISubmissionModal(true)}
+                        disabled={selectedForNCBI.size === 0}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Submit to NCBI ({selectedForNCBI.size})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quick preview of ready clones */}
+                  <div className="mt-3 space-y-1">
+                    {getClonesReadyForNCBI().slice(0, 5).map(file => (
+                      <div
+                        key={file.id}
+                        className="flex items-center space-x-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedForNCBI.has(file.id)}
+                          onChange={() => toggleNCBISelection(file.id)}
+                          className="rounded border-indigo-300"
+                        />
+                        <span className="font-mono text-indigo-900">{file.filename}</span>
+                        <span className="text-indigo-600">•</span>
+                        <span className="text-indigo-700">{file.assignedTo.name}</span>
+                      </div>
+                    ))}
+                    {getClonesReadyForNCBI().length > 5 && (
+                      <p className="text-sm text-indigo-600 italic">
+                        + {getClonesReadyForNCBI().length - 5} more...
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">
+                        <input
+                          type="checkbox"
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              selectAllForNCBI();
+                            } else {
+                              clearNCBISelection();
+                            }
+                          }}
+                          checked={selectedForNCBI.size > 0 && selectedForNCBI.size === getClonesReadyForNCBI().length}
+                          className="rounded border-gray-300"
+                        />
+                      </th>
+                      <th
+                        className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
+                        onClick={() => sortTable('cloneName')}
+                      >
+                        Clone Name {sortConfig.key === 'cloneName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th
+                        className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
+                        onClick={() => sortTable('originalName')}
+                      >
+                        Original File {sortConfig.key === 'originalName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th
+                        className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
+                        onClick={() => sortTable('assignedTo')}
+                      >
+                        Assigned Student {sortConfig.key === 'assignedTo' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th
+                        className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
+                        onClick={() => sortTable('school')}
+                      >
+                        School {sortConfig.key === 'school' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th
+                        className="text-left py-3 px-4 font-medium text-gray-900 cursor-pointer hover:bg-gray-50"
+                        onClick={() => sortTable('status')}
+                      >
+                        Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Progress</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedFiles.map(file => (
+                      <tr key={file.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4">
+                          {file.status === CLONE_STATUSES.TO_BE_SUBMITTED_NCBI && file.assignedTo && (
+                            <input
+                              type="checkbox"
+                              checked={selectedForNCBI.has(file.id)}
+                              onChange={() => toggleNCBISelection(file.id)}
+                              className="rounded border-gray-300"
+                            />
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-bold text-indigo-600">{file.cloneName}</td>
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => downloadFile(file.id, file.originalName)}
+                            className="font-mono text-sm text-blue-600 hover:text-blue-800 hover:underline cursor-pointer bg-transparent border-none p-0"
+                            title={`Download ${file.originalName}`}
+                          >
+                            {file.originalName}
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-sm">
                           {file.assignedTo ? (
-                            <button
-                              onClick={() => unassignFile(file.id)}
-                              className="text-orange-600 hover:text-orange-800 text-sm"
-                            >
-                              Unassign
-                            </button>
+                            <span className="text-green-700 font-medium">{file.assignedTo.name}</span>
                           ) : (
+                            <span className="text-gray-400 italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {file.assignedTo?.school?.name || '-'}
+                        </td>
+                        <td className="py-3 px-4">
+                          {file.assignedTo ? (
                             <select
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  assignFile(file.id, parseInt(e.target.value));
-                                }
-                              }}
-                              value=""
-                              className="text-sm border border-gray-300 rounded px-2 py-1"
+                              value={file.status}
+                              onChange={(e) => updateFileStatus(file.id, e.target.value)}
+                              className={`text-xs px-2 py-1 rounded-full font-medium border-0 ${getStatusColor(file.status)}`}
                             >
-                              <option value="">Assign to...</option>
-                              {students.map(student => (
-                                <option key={student.id} value={student.id}>
-                                  {student.name} - {student.school?.name}
+                              {[...STATUS_DROPDOWN_OPTIONS,
+                              { value: CLONE_STATUSES.TO_BE_SUBMITTED_NCBI, label: 'To be submitted to NCBI' },
+                              { value: CLONE_STATUSES.SUBMITTED_TO_NCBI, label: 'Submitted to NCBI' },
+                              { value: CLONE_STATUSES.UNREADABLE, label: 'Unreadable' }
+                              ].map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
                                 </option>
                               ))}
                             </select>
+                          ) : (
+                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(file.status)}`}>
+                              {file.status}
+                            </span>
                           )}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${file.progress === 100 ? 'bg-green-600' : file.progress > 0 ? 'bg-blue-600' : 'bg-gray-400'}`}
+                                style={{ width: `${file.progress}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-xs text-gray-600">{file.progress}%</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center space-x-2">
+                            {file.assignedTo ? (
+                              <button
+                                onClick={() => unassignFile(file.id)}
+                                className="text-orange-600 hover:text-orange-800 text-sm"
+                              >
+                                Unassign
+                              </button>
+                            ) : (
+                              <select
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    assignFile(file.id, parseInt(e.target.value));
+                                  }
+                                }}
+                                value=""
+                                className="text-sm border border-gray-300 rounded px-2 py-1"
+                              >
+                                <option value="">Assign to...</option>
+                                {students.map(student => (
+                                  <option key={student.id} value={student.id}>
+                                    {student.name} - {student.school?.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
 
-                          {/* ENHANCED DELETE BUTTON */}
-                          <button
-                            onClick={() => deleteFile(file.id)}
-                            disabled={file.assignedTo} // Disable button if assigned
-                            className={`p-1 ${file.assignedTo
-                              ? 'text-gray-400 cursor-not-allowed'
-                              : 'text-red-600 hover:text-red-800'
-                              }`}
-                            title={
-                              file.assignedTo
-                                ? `Cannot delete - assigned to ${file.assignedTo.name}`
-                                : 'Delete file'
-                            }
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                            {/* ENHANCED DELETE BUTTON */}
+                            <button
+                              onClick={() => deleteFile(file.id)}
+                              disabled={file.assignedTo} // Disable button if assigned
+                              className={`p-1 ${file.assignedTo
+                                ? 'text-gray-400 cursor-not-allowed'
+                                : 'text-red-600 hover:text-red-800'
+                                }`}
+                              title={
+                                file.assignedTo
+                                  ? `Cannot delete - assigned to ${file.assignedTo.name}`
+                                  : 'Delete file'
+                              }
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             // NEW: Practice clones table
             <div className="overflow-x-auto">
@@ -1490,6 +1657,13 @@ const DirectorCloneLibrary = () => {
           setSelectedPracticeClone(null);
         }}
         practiceClone={selectedPracticeClone}
+      />
+      <NCBISubmissionModal
+        isOpen={showNCBISubmissionModal}
+        onClose={() => setShowNCBISubmissionModal(false)}
+        selectedCount={selectedForNCBI.size}
+        onSubmit={submitToNCBI}
+        isSubmitting={ncbiSubmissionInProgress}
       />
     </>
   );
