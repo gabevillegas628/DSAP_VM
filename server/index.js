@@ -93,6 +93,7 @@ emailTransporter.verify((error, success) => {
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 
 // Create uploads directory if it doesn't exist
 const directories = [
@@ -2079,7 +2080,7 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       }
 
       const sequence = getCleanSequence(
-        analysisData.answers || {}, 
+        analysisData.answers || {},
         analysisQuestions
       );
 
@@ -2109,9 +2110,9 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
     }
 
     if (sequences.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'No valid sequences to submit',
-        failed 
+        failed
       });
     }
 
@@ -2161,7 +2162,7 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       try {
         const file = files.find(f => f.id === seq.fileId);
         const analysisData = JSON.parse(file.analysisData || '{}');
-        
+
         await prisma.uploadedFile.update({
           where: { id: seq.fileId },
           data: {
@@ -2179,7 +2180,7 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
             })
           }
         });
-        
+
         successful.push(seq.fileId);
       } catch (error) {
         console.error(`Error updating file ${seq.fileId}:`, error);
@@ -2192,9 +2193,10 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
     }
 
     // Store the .sqn file for later submission
-    const sqnPath = path.join(__dirname, 'submissions', `ncbi_${Date.now()}.sqn`);
-    await fs.mkdir(path.dirname(sqnPath), { recursive: true });
-    await fs.writeFile(sqnPath, result.sqnFile);
+    const sqnFilename = `ncbi_${Date.now()}.sqn`;
+    const sqnPath = path.join(__dirname, 'submissions', sqnFilename);
+    await fsPromises.mkdir(path.dirname(sqnPath), { recursive: true });
+    await fsPromises.writeFile(sqnPath, result.sqnFile);
 
     // Clean up temporary files
     if (result.workDir) {
@@ -2205,7 +2207,7 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       success: true,
       successful,
       failed,
-      sqnPath,
+      sqnFilename,
       validation: result.validation,
       message: `Successfully generated submission file for ${successful.length} sequences. ${result.validation.warnings.length > 0 ? `${result.validation.warnings.length} warnings present.` : 'No validation issues.'}`
     });
@@ -2221,12 +2223,12 @@ app.get('/api/ncbi/download/:filename', authenticateToken, requireRole(['directo
   try {
     const { filename } = req.params;
     const sqnPath = path.join(__dirname, 'submissions', filename);
-    
+
     // Security check - ensure file exists and is in submissions directory
     if (!await fs.access(sqnPath).then(() => true).catch(() => false)) {
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     res.download(sqnPath);
   } catch (error) {
     res.status(500).json({ error: error.message });
