@@ -95,10 +95,18 @@ const path = require('path');
 const fs = require('fs');
 
 // Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+const directories = [
+  path.join(__dirname, 'uploads'),
+  path.join(__dirname, 'submissions'),
+  path.join(__dirname, 'temp')
+];
+
+directories.forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`✓ Created directory: ${dir}`);
+  }
+});
 
 // Configure multer for local storage
 const storage = multer.diskStorage({
@@ -2001,6 +2009,7 @@ app.put('/api/uploaded-files/:id/status', authenticateToken, async (req, res) =>
 });
 
 // NCBI Submission endpoint
+const { processNCBISubmission, cleanupWorkDir } = require('./ncbiSubmission.js');
 app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async (req, res) => {
   try {
     const { fileIds, submitterInfo } = req.body;
@@ -2009,9 +2018,10 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       return res.status(400).json({ error: 'No files selected for submission' });
     }
 
-    console.log(`=== NCBI SUBMISSION REQUEST ===`);
-    console.log(`Files to submit: ${fileIds.length}`);
-    console.log(`Submitter: ${submitterInfo.submitterName}`);
+    // Fetch analysis questions
+    const analysisQuestions = await prisma.analysisQuestion.findMany({
+      orderBy: { order: 'asc' }
+    });
 
     // Fetch the files with their analysis data
     const files = await prisma.uploadedFile.findMany({
@@ -2035,102 +2045,188 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       return res.status(400).json({ error: 'No valid files found for submission' });
     }
 
-    const successful = [];
+    // Helper function to extract clean sequence
+    const getCleanSequence = (answers, questions) => {
+      const editingQuestions = questions.filter(q =>
+        q.step === 'clone-editing' && q.type === 'dna_sequence'
+      );
+
+      for (const question of editingQuestions) {
+        const answer = answers[question.id];
+        if (answer && typeof answer === 'string') {
+          const cleanSequence = answer.replace(/\s/g, '').toUpperCase();
+          // Only accept pure ATGC sequences
+          if (/^[ATGC]+$/.test(cleanSequence) && cleanSequence.length > 50) {
+            return cleanSequence;
+          }
+        }
+      }
+      return null;
+    };
+
+    // Prepare sequences for submission
+    const sequences = [];
     const failed = [];
 
-    // Process each file
     for (const file of files) {
+      let analysisData = {};
       try {
-        // Parse analysis data
-        let analysisData = {};
-        try {
-          analysisData = JSON.parse(file.analysisData || '{}');
-        } catch (e) {
-          console.error(`Failed to parse analysis data for file ${file.id}`);
-        }
+        analysisData = JSON.parse(file.analysisData || '{}');
+      } catch (e) {
+        console.error(`Failed to parse analysis data for file ${file.id}`);
+      }
 
-        // Extract sequence from analysis data
-        const sequence = analysisData.answers?.editedSequence || 
-                        analysisData.answers?.trimmedSequence ||
-                        analysisData.rawSequence;
+      const sequence = getCleanSequence(
+        analysisData.answers || {}, 
+        analysisQuestions
+      );
 
-        if (!sequence) {
-          failed.push({
-            fileId: file.id,
-            filename: file.filename,
-            error: 'No sequence data found'
-          });
-          continue;
-        }
-
-        // Prepare submission data for NCBI
-        const submissionData = {
+      if (!sequence) {
+        failed.push({
+          fileId: file.id,
           filename: file.filename,
-          sequence: sequence,
-          organism: submitterInfo.organism,
-          isolationSource: submitterInfo.isolationSource,
-          collectionDate: submitterInfo.collectionDate,
-          country: submitterInfo.country,
-          submitter: {
-            name: submitterInfo.submitterName,
-            email: submitterInfo.submitterEmail,
-            institution: submitterInfo.submitterInstitution
-          },
-          student: {
-            name: file.assignedTo?.name,
-            school: file.assignedTo?.school?.name
-          },
-          notes: submitterInfo.notes
-        };
-
-        // TODO: Implement actual NCBI API submission here
-        // For now, we'll simulate success and log the data
-        console.log(`Would submit to NCBI:`, {
-          filename: file.filename,
-          sequenceLength: sequence.length,
-          organism: submitterInfo.organism
+          error: 'No clean NCBI-ready sequence found (must contain only A, T, G, C)'
         });
+        continue;
+      }
 
-        // Update file status to SUBMITTED_TO_NCBI
+      sequences.push({
+        id: file.cloneName,
+        cloneName: file.cloneName,
+        sequence: sequence,
+        organism: submitterInfo.organism,
+        isolationSource: submitterInfo.isolationSource,
+        collectionDate: submitterInfo.collectionDate,
+        country: submitterInfo.country,
+        cloneLibrary: submitterInfo.libraryName,
+        clone: file.cloneName,
+        fileId: file.id,
+        filename: file.filename,
+        student: file.assignedTo
+      });
+    }
+
+    if (sequences.length === 0) {
+      return res.status(400).json({ 
+        error: 'No valid sequences to submit',
+        failed 
+      });
+    }
+
+    // Parse submitter name into parts
+    const nameParts = submitterInfo.submitterName.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts[nameParts.length - 1];
+    const initials = nameParts.map(n => n[0]).join('.');
+
+    const submitter = {
+      firstName,
+      lastName,
+      initials,
+      email: submitterInfo.submitterEmail,
+      institution: submitterInfo.submitterInstitution,
+      city: submitterInfo.city || '',
+      state: submitterInfo.state || '',
+      country: submitterInfo.country || 'USA',
+      postalCode: submitterInfo.postalCode || ''
+    };
+
+    // Process submission with tbl2asn
+    const result = await processNCBISubmission(sequences, submitter);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        details: result.details,
+        validation: result.validation
+      });
+    }
+
+    // If there are validation errors, return them
+    if (result.validation.errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        validation: result.validation,
+        message: 'Sequences failed NCBI validation. Please review errors and correct issues.'
+      });
+    }
+
+    // Update database records
+    const successful = [];
+    for (const seq of sequences) {
+      try {
+        const file = files.find(f => f.id === seq.fileId);
+        const analysisData = JSON.parse(file.analysisData || '{}');
+        
         await prisma.uploadedFile.update({
-          where: { id: file.id },
+          where: { id: seq.fileId },
           data: {
             status: CLONE_STATUSES.SUBMITTED_TO_NCBI,
-            // Store submission metadata
             analysisData: JSON.stringify({
               ...analysisData,
               ncbiSubmission: {
                 submittedAt: new Date().toISOString(),
                 submitter: submitterInfo.submitterName,
                 organism: submitterInfo.organism,
-                // In real implementation, store NCBI accession number here
-                accessionNumber: null
+                sequenceLength: seq.sequence.length,
+                sqnGenerated: true,
+                validationWarnings: result.validation.warnings
               }
             })
           }
         });
-
-        successful.push(file.id);
-
+        
+        successful.push(seq.fileId);
       } catch (error) {
-        console.error(`Error submitting file ${file.id}:`, error);
+        console.error(`Error updating file ${seq.fileId}:`, error);
         failed.push({
-          fileId: file.id,
-          filename: file.filename,
-          error: error.message
+          fileId: seq.fileId,
+          filename: seq.filename,
+          error: 'Database update failed'
         });
       }
+    }
+
+    // Store the .sqn file for later submission
+    const sqnPath = path.join(__dirname, 'submissions', `ncbi_${Date.now()}.sqn`);
+    await fs.mkdir(path.dirname(sqnPath), { recursive: true });
+    await fs.writeFile(sqnPath, result.sqnFile);
+
+    // Clean up temporary files
+    if (result.workDir) {
+      setTimeout(() => cleanupWorkDir(result.workDir), 60000); // Cleanup after 1 minute
     }
 
     res.json({
       success: true,
       successful,
       failed,
-      message: `Successfully submitted ${successful.length} of ${fileIds.length} clones to NCBI`
+      sqnPath,
+      validation: result.validation,
+      message: `Successfully generated submission file for ${successful.length} sequences. ${result.validation.warnings.length > 0 ? `${result.validation.warnings.length} warnings present.` : 'No validation issues.'}`
     });
 
   } catch (error) {
     console.error('NCBI submission error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download generated .sqn file
+app.get('/api/ncbi/download/:filename', authenticateToken, requireRole(['director']), async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const sqnPath = path.join(__dirname, 'submissions', filename);
+    
+    // Security check - ensure file exists and is in submissions directory
+    if (!await fs.access(sqnPath).then(() => true).catch(() => false)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    res.download(sqnPath);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

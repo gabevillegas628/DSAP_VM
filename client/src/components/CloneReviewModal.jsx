@@ -1,5 +1,5 @@
 // components/CloneReviewModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   Eye,
@@ -29,7 +29,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
 
 
 
-  const fetchCloneData = async () => {
+  const fetchCloneData = useCallback(async () => {
     try {
       setLoading(true);
       console.log('🔍 Fetching clone data for ID:', cloneId, 'Type:', cloneType);
@@ -125,7 +125,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     } finally {
       setLoading(false);
     }
-  };
+  }, [cloneId, cloneType, studentId]); 
 
   // Fetch clone data and analysis questions when modal opens
   useEffect(() => {
