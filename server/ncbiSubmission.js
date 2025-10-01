@@ -44,7 +44,7 @@ const generateFeatureTable = (sequences, outputPath) => {
             `>Feature ${seq.id}`,
             `1\t${seq.sequence.length}\tsource`,
             `\t\t\torganism\t${seq.organism}`,
-            `\t\t\tmoltype\tmRNA`
+            //`\t\t\tmoltype\tmRNA`
         ];
 
         // Add additional source qualifiers if provided
