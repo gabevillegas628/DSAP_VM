@@ -200,11 +200,6 @@ const processNCBISubmission = async (sequences, submitterInfo) => {
   }
 };
 
-module.exports = {
-  processNCBISubmission,
-  cleanupWorkDir
-};
-
 // Cleanup temporary files
 const cleanupWorkDir = async (workDir) => {
   try {
@@ -213,6 +208,13 @@ const cleanupWorkDir = async (workDir) => {
     console.error('Cleanup error:', error);
   }
 };
+
+module.exports = {
+  processNCBISubmission,
+  cleanupWorkDir
+};
+
+
 
 module.exports = {
   processNCBISubmission,
