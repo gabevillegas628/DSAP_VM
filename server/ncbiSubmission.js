@@ -144,14 +144,21 @@ const processNCBISubmission = async (sequences, submitterInfo) => {
   try {
     const fastaFile = path.join(workDir, 'sequences.fsa');
     const featureFile = path.join(workDir, 'sequences.tbl');
-    const templateFile = path.join(workDir, 'template.sbt');
+    
+    // Use the existing template file instead of generating one
+    const templateFile = path.join(__dirname, 'template.sbt');
+    
+    // Verify template exists
+    const templateExists = await fs.access(templateFile).then(() => true).catch(() => false);
+    if (!templateExists) {
+      throw new Error('Template file (template.sbt) not found in server directory');
+    }
     
     // Generate input files
     await generateFastaFile(sequences, fastaFile);
     await generateFeatureTable(sequences, featureFile);
-    await generateSubmissionTemplate(submitterInfo, templateFile);
     
-    // Run table2asn (updated from tbl2asn)
+    // Run table2asn
     const result = await runTable2asn(workDir, fastaFile, templateFile);
     
     if (!result.success) {
