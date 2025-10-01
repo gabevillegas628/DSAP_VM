@@ -790,7 +790,11 @@ const DirectorCloneLibrary = () => {
                             onChange={(e) => updateFileStatus(file.id, e.target.value)}
                             className={`text-xs px-2 py-1 rounded-full font-medium border-0 ${getStatusColor(file.status)}`}
                           >
-                            {STATUS_DROPDOWN_OPTIONS.map(option => (
+                            {[...STATUS_DROPDOWN_OPTIONS,
+                            { value: CLONE_STATUSES.TO_BE_SUBMITTED_NCBI, label: 'To be submitted to NCBI' },
+                            { value: CLONE_STATUSES.SUBMITTED_TO_NCBI, label: 'Submitted to NCBI' },
+                            { value: CLONE_STATUSES.UNREADABLE, label: 'Unreadable' }
+                            ].map(option => (
                               <option key={option.value} value={option.value}>
                                 {option.label}
                               </option>
