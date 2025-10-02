@@ -78,7 +78,7 @@ const generateFeatureTable = async (sequences, outputPath) => {
 
 // Run table2asn command
 const runTable2asn = async (workDir, fastaFile, templateFile) => {
-  const command = `table2asn -indir ${workDir} -t ${templateFile} -V vb -a s -outdir ${workDir}`;
+  const command = `table2asn -indir ${workDir} -t ${templateFile} -V vb -a s -outdir ${workDir} -Z discrep.txt -o output.gbf`;
   
   try {
     const { stdout, stderr } = await execAsync(command, {
