@@ -78,29 +78,34 @@ const generateFeatureTable = async (sequences, outputPath) => {
 
 // Run table2asn command
 const runTable2asn = async (workDir, fastaFile, templateFile) => {
-    const discrepFile = path.join(workDir, 'discrep.txt');
-    const command = `table2asn -indir ${workDir} -t ${templateFile} -V vb -a rs -outdir ${workDir} -z ${discrepFile}`;
-
+    console.log('\n=== FILES BEFORE TABLE2ASN ===');
+    const filesBefore = await fs.readdir(workDir);
+    console.log(filesBefore);
+    
+    const command = `table2asn -indir ${workDir} -t ${templateFile} -V vb -a r -outdir ${workDir}`;
+    //                                                                         ^ just 'r' for GenBank only
+    console.log('Command:', command);
+    
     try {
         const { stdout, stderr } = await execAsync(command, {
             cwd: workDir,
             maxBuffer: 1024 * 1024 * 10,
             timeout: 60000
         });
-
-        console.log('table2asn output:', stdout);
-        if (stderr) console.warn('table2asn stderr:', stderr);
-
-        // Check if stderr contains actual errors (not just warnings)
-        if (stderr && stderr.toLowerCase().includes('error:')) {
-            return { success: false, error: 'table2asn reported errors', stderr };
-        }
-
+        
+        console.log('=== TABLE2ASN OUTPUT ===');
+        console.log('STDOUT:', stdout);
+        console.log('STDERR:', stderr);
+        
+        console.log('\n=== FILES AFTER TABLE2ASN ===');
+        const filesAfter = await fs.readdir(workDir);
+        console.log(filesAfter);
+        
         return { success: true, stdout, stderr };
     } catch (error) {
-        console.error('table2asn error:', error);
-        return {
-            success: false,
+        console.error('table2asn failed:', error);
+        return { 
+            success: false, 
             error: error.message,
             stderr: error.stderr || ''
         };
