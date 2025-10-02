@@ -2224,13 +2224,16 @@ app.get('/api/ncbi/download/:filename', authenticateToken, requireRole(['directo
     const { filename } = req.params;
     const sqnPath = path.join(__dirname, 'submissions', filename);
 
-    // Security check - ensure file exists and is in submissions directory
-    if (!await fs.access(sqnPath).then(() => true).catch(() => false)) {
+    // Use fsPromises instead of fs
+    const exists = await fsPromises.access(sqnPath).then(() => true).catch(() => false);
+
+    if (!exists) {
       return res.status(404).json({ error: 'File not found' });
     }
 
     res.download(sqnPath);
   } catch (error) {
+    console.error('Download error:', error);
     res.status(500).json({ error: error.message });
   }
 });

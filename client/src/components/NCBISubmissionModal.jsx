@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, AlertCircle, CheckCircle, Download } from 'lucide-react';
+import apiService from '../services/apiService';
 
-const NCBISubmissionModal = ({ 
-  isOpen, 
-  onClose, 
-  selectedCount, 
+const NCBISubmissionModal = ({
+  isOpen,
+  onClose,
+  selectedCount,
   onSubmit,
   isSubmitting,
   defaultOrganism = '',
@@ -50,7 +51,7 @@ const NCBISubmissionModal = ({
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.submitterName.trim()) {
       newErrors.submitterName = 'Submitter name is required';
     }
@@ -89,17 +90,9 @@ const NCBISubmissionModal = ({
 
   const handleDownloadSqn = async () => {
     if (!submissionResult?.sqnFilename) return;
-    
+
     try {
-      const response = await fetch(`/api/ncbi/download/${submissionResult.sqnFilename}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (!response.ok) throw new Error('Download failed');
-      
-      const blob = await response.blob();
+      const blob = await apiService.downloadBlob(`/ncbi/download/${submissionResult.sqnFilename}`);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -148,8 +141,8 @@ const NCBISubmissionModal = ({
           <div>
             <h3 className="text-xl font-bold text-gray-900">Submit to NCBI GenBank</h3>
             <p className="text-sm text-gray-600 mt-1">
-              {submissionResult ? 
-                'Submission Results' : 
+              {submissionResult ?
+                'Submission Results' :
                 `Submitting ${selectedCount} clone${selectedCount !== 1 ? 's' : ''} to NCBI`
               }
             </p>
@@ -352,9 +345,8 @@ const NCBISubmissionModal = ({
                     value={formData.submitterName}
                     onChange={handleChange}
                     placeholder="First Last"
-                    className={`w-full px-3 py-2 border rounded-lg ${
-                      errors.submitterName ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg ${errors.submitterName ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     disabled={isSubmitting}
                   />
                   {errors.submitterName && (
@@ -371,9 +363,8 @@ const NCBISubmissionModal = ({
                     name="submitterEmail"
                     value={formData.submitterEmail}
                     onChange={handleChange}
-                    className={`w-full px-3 py-2 border rounded-lg ${
-                      errors.submitterEmail ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg ${errors.submitterEmail ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     disabled={isSubmitting}
                   />
                   {errors.submitterEmail && (
@@ -390,9 +381,8 @@ const NCBISubmissionModal = ({
                     name="submitterInstitution"
                     value={formData.submitterInstitution}
                     onChange={handleChange}
-                    className={`w-full px-3 py-2 border rounded-lg ${
-                      errors.submitterInstitution ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg ${errors.submitterInstitution ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     disabled={isSubmitting}
                   />
                   {errors.submitterInstitution && (
@@ -477,9 +467,8 @@ const NCBISubmissionModal = ({
                     value={formData.organism}
                     onChange={handleChange}
                     placeholder="e.g., Escherichia coli"
-                    className={`w-full px-3 py-2 border rounded-lg ${
-                      errors.organism ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg ${errors.organism ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     disabled={isSubmitting}
                   />
                   {errors.organism && (
