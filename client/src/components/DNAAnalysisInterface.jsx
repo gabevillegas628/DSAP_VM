@@ -595,7 +595,8 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
   // Handler for replying to director comments
   // Handler for replying to director comments - UPDATED for CloneDiscussion
   const handleReplyToComment = async (comment) => {
-    const replyText = `Replying to: ${comment.comment}`;
+    // Use comment.feedback instead of comment.comment
+    const replyText = `Replying to instructor feedback: ${comment.feedback}`;
 
     try {
       // Check if a clone discussion already exists using new API
@@ -603,8 +604,6 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
       if (discussion && discussion.messages && discussion.messages.length > 0) {
         // Case 1: Clone discussion exists - navigate to messages and pre-populate reply
-
-
 
         // Navigate to messages tab with the clone selected and pre-populate reply
         if (onNavigateToMessages) {
@@ -662,24 +661,28 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
     console.log('All reviewComments:', reviewComments);
     */
 
+    // Filter to only return visible feedback
     const comments = reviewComments.filter(comment => {
       /*
       console.log('Checking comment:', comment);
       console.log('Comment questionId:', comment.questionId, 'Type:', typeof comment.questionId);
-      console.log('Match?', comment.questionId === questionId, 'Loose match?', comment.questionId == questionId);
+      console.log('Match?', comment.questionId === questionId);
+      console.log('Feedback visible?', comment.feedbackVisible);
       */
-      return comment.questionId === questionId;
+
+      // Only return comments for this question that are marked as visible
+      return comment.questionId === questionId && comment.feedbackVisible === true;
     });
 
-    //console.log('Found comments for question:', comments);
+    console.log('Found visible comments for question:', comments);
     return comments;
   };
 
   const isQuestionCorrect = (questionId) => {
-    return reviewComments.some(comment =>
-      comment.questionId === questionId && comment.comment === 'Correct!'
-    );
+    const comment = reviewComments.find(c => c.questionId === questionId);
+    return comment?.isCorrect === true;
   };
+
 
   const checkForUnreadFeedback = async () => {
     try {
@@ -1627,7 +1630,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
           )}
         </div>
 
-        {/* Display instructor feedback for this question */}
+        {/* Display instructor feedback for this question - ONLY VISIBLE FEEDBACK */}
         {questionComments.length > 0 && (
           <div className="mt-3 space-y-2">
             <div className="flex items-center space-x-2">
@@ -1637,34 +1640,65 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
             {questionComments.map((comment, index) => (
               <div
                 key={index}
-                className={`p-3 border rounded-lg ${comment.comment === 'Correct!'
+                className={`p-3 border rounded-lg ${comment.isCorrect === true
                   ? 'bg-green-50 border-green-200'
-                  : 'bg-blue-50 border-blue-200'
+                  : comment.isCorrect === false
+                    ? 'bg-red-50 border-red-200'
+                    : 'bg-blue-50 border-blue-200'
                   }`}
               >
                 <div className="flex items-start space-x-2">
-                  {comment.comment === 'Correct!' ? (
+                  {comment.isCorrect === true ? (
                     <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  ) : comment.isCorrect === false ? (
+                    <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
                   ) : (
                     <User className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                   )}
                   <div className="flex-1">
-                    <p className={`text-sm ${comment.comment === 'Correct!' ? 'text-green-800' : 'text-blue-800'}`}>
-                      {comment.comment}
-                    </p>
+                    {/* Status label */}
+                    <div className="mb-1">
+                      <span className={`text-xs font-medium ${comment.isCorrect === true ? 'text-green-800' :
+                        comment.isCorrect === false ? 'text-red-800' :
+                          'text-blue-800'
+                        }`}>
+                        {comment.isCorrect === true ? '✓ Correct' :
+                          comment.isCorrect === false ? '✗ Needs Improvement' :
+                            'ℹ Instructor Feedback'}
+                      </span>
+                    </div>
+
+                    {/* Display feedback text if it exists and is not empty */}
+                    {comment.feedback && comment.feedback.trim() !== '' && (
+                      <p className={`text-sm ${comment.isCorrect === true ? 'text-green-800' :
+                        comment.isCorrect === false ? 'text-red-800' :
+                          'text-blue-800'
+                        }`}>
+                        {comment.feedback}
+                      </p>
+                    )}
+
+                    {/* Timestamp */}
                     {comment.timestamp && (
-                      <p className={`text-xs mt-1 ${comment.comment === 'Correct!' ? 'text-green-600' : 'text-blue-600'}`}>
+                      <p className={`text-xs mt-1 ${comment.isCorrect === true ? 'text-green-600' :
+                        comment.isCorrect === false ? 'text-red-600' :
+                          'text-blue-600'
+                        }`}>
                         {new Date(comment.timestamp).toLocaleString()}
                       </p>
                     )}
-                    {/* NEW: Reply button for non-"Correct!" comments */}
-                    {comment.comment !== 'Correct!' && (
+
+                    {/* Reply button - only show if there's actual feedback text */}
+                    {comment.feedback && comment.feedback.trim() !== '' && (
                       <button
                         onClick={() => handleReplyToComment(comment)}
-                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2 flex items-center space-x-1"
+                        className={`text-xs hover:underline mt-2 flex items-center space-x-1 ${comment.isCorrect === true ? 'text-green-600 hover:text-green-800' :
+                          comment.isCorrect === false ? 'text-red-600 hover:text-red-800' :
+                            'text-blue-600 hover:text-blue-800'
+                          }`}
                       >
                         <MessageCircle className="w-3 h-3" />
-                        <span>Reply</span>
+                        <span>Reply to Instructor</span>
                       </button>
                     )}
                   </div>

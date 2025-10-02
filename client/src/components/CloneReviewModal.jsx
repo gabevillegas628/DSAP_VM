@@ -125,7 +125,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     } finally {
       setLoading(false);
     }
-  }, [cloneId, cloneType, studentId]); 
+  }, [cloneId, cloneType, studentId]);
 
   // Fetch clone data and analysis questions when modal opens
   useEffect(() => {
@@ -199,9 +199,11 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     const newComment = {
       id: Date.now(),
       questionId: questionId,
-      comment: comment.trim(),
-      timestamp: new Date().toISOString(),
-      type: 'feedback'
+      feedback: comment.trim(),  // renamed from "comment"
+      feedbackVisible: true,  // NEW - default to visible
+      correctAnswer: '',  // NEW - empty by default
+      isCorrect: null,  // NEW - not marked correct/incorrect yet
+      timestamp: new Date().toISOString()
     };
 
     setReviewData(prev => ({
@@ -214,9 +216,11 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     const correctComment = {
       id: Date.now(),
       questionId: questionId,
-      comment: '✓ Correct',
-      timestamp: new Date().toISOString(),
-      type: 'correct'
+      feedback: '',  // No feedback text for correct answers
+      feedbackVisible: true,
+      correctAnswer: '',
+      isCorrect: true,  // NEW - proper boolean instead of type: 'correct'
+      timestamp: new Date().toISOString()
     };
 
     // Remove any existing comments for this question, then add correct comment
@@ -503,7 +507,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
                             {questions.map((question, index) => {
                               const answer = submission.answers[question.id];
                               const questionComments = reviewData.comments.filter(c => c.questionId === question.id);
-                              const isMarkedCorrect = questionComments.some(c => c.type === 'correct');
+                              const isMarkedCorrect = questionComments.some(c => c.isCorrect === true);
 
                               return (
                                 <div
@@ -544,12 +548,16 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
                                       {questionComments.map(comment => (
                                         <div
                                           key={comment.id}
-                                          className={`text-xs px-2 py-1 rounded ${comment.type === 'correct'
-                                            ? 'bg-green-100 text-green-800'
-                                            : 'bg-blue-100 text-blue-800'
+                                          className={`text-xs px-2 py-1 rounded ${comment.isCorrect === true
+                                              ? 'bg-green-100 text-green-800'
+                                              : comment.isCorrect === false
+                                                ? 'bg-red-100 text-red-800'
+                                                : 'bg-blue-100 text-blue-800'
                                             }`}
                                         >
-                                          {comment.comment}
+                                          {comment.isCorrect === true ? '✓ Correct' :
+                                            comment.isCorrect === false ? '✗ Needs Improvement' :
+                                              comment.feedback}
                                         </div>
                                       ))}
                                     </div>

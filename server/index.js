@@ -2219,20 +2219,21 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
 });
 
 // Download generated .sqn file
+// Done fucking touch this function at all, like ever just leave it alone, it is cursed
 app.get('/api/ncbi/download/:filename', authenticateToken, requireRole(['director']), async (req, res) => {
   console.log('=== NCBI DOWNLOAD ENDPOINT HIT ===');
   console.log('Filename requested:', req.params.filename);
-  
+
   try {
     const { filename } = req.params;
     const sqnPath = path.join(__dirname, 'submissions', filename);
-    
+
     console.log('Full path:', sqnPath);
-    
+
     // Check if file exists
     const exists = await fsPromises.access(sqnPath).then(() => true).catch(() => false);
     console.log('File exists?', exists);
-    
+
     if (!exists) {
       console.log('File not found, returning 404');
       return res.status(404).json({ error: 'File not found' });
@@ -4192,35 +4193,36 @@ async function generatePracticeFeedback(practiceCloneId, userAnswers) {
         correctCount++;
         comments.push({
           questionId: correct.questionId,
-          comment: 'Correct!',
-          type: 'success',
+          feedback: '',  // No feedback text needed for correct answers
+          feedbackVisible: true,
+          correctAnswer: correct.correctAnswer,  // Store for reference
+          isCorrect: true,  // NEW: proper boolean
           timestamp: new Date().toISOString()
         });
       } else {
         comments.push({
           questionId: correct.questionId,
-          comment: correct.explanation || `Incorrect. The correct answer is: ${correct.correctAnswer}`,
-          type: 'correction',
+          feedback: correct.explanation || `The correct answer is: ${correct.correctAnswer}`,  // renamed from "comment"
+          feedbackVisible: true,  // NEW: default visible
+          correctAnswer: correct.correctAnswer,  // NEW: store correct answer
+          isCorrect: false,  // NEW: proper boolean
           timestamp: new Date().toISOString()
         });
       }
     });
 
-    const score = correctAnswers.length > 0 ? Math.round((correctCount / correctAnswers.length) * 100) : 0;
+    const score = correctAnswers.length > 0 ?
+      Math.round((correctCount / correctAnswers.length) * 100) : 0;
 
     return {
-      comments,
-      score,
-      totalQuestions: correctAnswers.length,
-      correctAnswers: correctCount
+      reviewComments: comments,
+      reviewScore: score
     };
   } catch (error) {
     console.error('Error generating practice feedback:', error);
     return {
-      comments: [],
-      score: 0,
-      totalQuestions: 0,
-      correctAnswers: 0
+      reviewComments: [],
+      reviewScore: 0
     };
   }
 }

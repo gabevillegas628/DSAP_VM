@@ -268,32 +268,28 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
   const sendQuestionCommentsAsMessages = async (submission, questionComments) => {
     if (!questionComments || questionComments.length === 0) return;
 
-    // Filter out "Correct!" messages - these are just internal markers
-    const meaningfulComments = questionComments.filter(comment =>
-      comment.comment &&
-      comment.comment.trim() !== '' &&
-      comment.comment.trim() !== 'Correct!'
+    // Filter to only send feedback that is marked as visible
+    const visibleComments = questionComments.filter(comment =>
+      comment.feedback &&
+      comment.feedback.trim() !== '' &&
+      comment.feedbackVisible === true  // NEW: Only send visible feedback
     );
 
-    if (meaningfulComments.length === 0) {
-      console.log('No meaningful comments to send (filtered out "Correct!" markers)');
+    if (visibleComments.length === 0) {
+      console.log('No visible feedback to send');
       return;
     }
 
     try {
-      // Get or create discussion for this clone
       const discussion = await apiService.get(`/clone-discussions/${submission.assignedTo.id}/${submission.id}`);
-      console.log('Using discussion:', discussion.id);
 
-      // Add initial feedback message if this is the first feedback
       await apiService.post(`/clone-discussions/${discussion.id}/messages`, {
-        senderId: currentUser.id, // Current director ID - you might want to use currentUser.id
-        content: `📝 **Review Feedback Completed** - Individual question feedback follows below:`,
+        senderId: 1,
+        content: `🔍 **Review Feedback Completed** - Individual question feedback follows below:`,
         messageType: 'feedback'
       });
 
-      // Send each question comment as a discussion message
-      for (const comment of meaningfulComments) {
+      for (const comment of visibleComments) {
         const question = analysisQuestions.find(q => q.id === comment.questionId);
         const questionIndex = analysisQuestions.findIndex(q => q.id === comment.questionId);
         const questionNumber = questionIndex >= 0 ? questionIndex + 1 : '?';
@@ -301,21 +297,16 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
         const feedbackContent = `**Q${questionNumber} Feedback:** ${questionText.substring(0, 80)}${questionText.length > 80 ? '...' : ''}
 
-            📋 **Your Answer:** _Please see your analysis for details_
+📋 **Your Answer:** _Please see your analysis for details_
 
-            💬 **Instructor Feedback:** ${comment.comment}`;
+💬 **Instructor Feedback:** ${comment.feedback}`;  // Use 'feedback' instead of 'comment'
 
         await apiService.post(`/clone-discussions/${discussion.id}/messages`, {
-          senderId: currentUser.id, // Current director ID
+          senderId: 1,
           content: feedbackContent,
           messageType: 'feedback'
         });
-
-        console.log(`Added Q${questionNumber} feedback to discussion`);
       }
-
-      console.log(`Successfully added ${meaningfulComments.length} feedback messages to discussion ${discussion.id}`);
-
     } catch (error) {
       console.error('Error sending feedback to discussion:', error);
       throw error;
@@ -1182,14 +1173,28 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
     return `${diffInDays}d ago`;
   };
 
-  const addComment = (questionId, comment, commentType = 'feedback') => {
-    setReviewData(prev => ({
-      ...prev,
-      comments: [
-        ...prev.comments.filter(c => c.questionId !== questionId),
-        { questionId, comment, type: commentType, timestamp: new Date().toISOString() }
-      ]
-    }));
+  // UPDATED addComment function to new structure
+  const addComment = (questionId, feedback, feedbackVisible = true) => {
+    setReviewData(prev => {
+      // Remove any existing comment for this question
+      const filteredComments = prev.comments.filter(c => c.questionId !== questionId);
+
+      // Add new comment with new structure
+      return {
+        ...prev,
+        comments: [
+          ...filteredComments,
+          {
+            questionId,
+            feedback,  // renamed from "comment"
+            feedbackVisible,  // NEW
+            correctAnswer: '',  // NEW - will be set separately
+            isCorrect: null,  // NEW - null means not marked yet
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
+    });
   };
 
   const renderBlastAnswerRows = (answer) => {
@@ -1254,26 +1259,104 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
   };
 
   const markQuestionAsCorrect = (questionId) => {
-    const input = document.querySelector(`input[data-question-id="${questionId}"]`);
-    if (input) input.value = '';
-    addComment(questionId, 'Correct!');
+    setReviewData(prev => {
+      const existingComment = prev.comments.find(c => c.questionId === questionId);
+      const filteredComments = prev.comments.filter(c => c.questionId !== questionId);
+
+      return {
+        ...prev,
+        comments: [
+          ...filteredComments,
+          {
+            questionId,
+            feedback: existingComment?.feedback || '',
+            feedbackVisible: existingComment?.feedbackVisible ?? true,
+            correctAnswer: existingComment?.correctAnswer || '',
+            isCorrect: true,  // NEW proper boolean
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
+    });
+  };
+
+  const markQuestionAsIncorrect = (questionId) => {
+    setReviewData(prev => {
+      const existingComment = prev.comments.find(c => c.questionId === questionId);
+      const filteredComments = prev.comments.filter(c => c.questionId !== questionId);
+
+      return {
+        ...prev,
+        comments: [
+          ...filteredComments,
+          {
+            questionId,
+            feedback: existingComment?.feedback || '',
+            feedbackVisible: existingComment?.feedbackVisible ?? true,
+            correctAnswer: existingComment?.correctAnswer || '',
+            isCorrect: false,  // Mark as incorrect
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
+    });
+  };
+
+  // Updated function to set feedback visibility
+  const updateFeedbackVisibility = (questionId, visible) => {
+    setReviewData(prev => {
+      const comment = prev.comments.find(c => c.questionId === questionId);
+      if (!comment) return prev;
+
+      return {
+        ...prev,
+        comments: prev.comments.map(c =>
+          c.questionId === questionId
+            ? { ...c, feedbackVisible: visible }
+            : c
+        )
+      };
+    });
+  };
+
+  // store the correct answer when director sets it
+  const updateCorrectAnswer = (questionId, correctAnswer) => {
+    setReviewData(prev => {
+      const existingComment = prev.comments.find(c => c.questionId === questionId);
+      const filteredComments = prev.comments.filter(c => c.questionId !== questionId);
+
+      return {
+        ...prev,
+        comments: [
+          ...filteredComments,
+          {
+            questionId,
+            feedback: existingComment?.feedback || '',
+            feedbackVisible: existingComment?.feedbackVisible ?? true,
+            correctAnswer,  // Update correct answer
+            isCorrect: existingComment?.isCorrect ?? null,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
+    });
   };
 
   const removeCorrectMarking = (questionId) => {
     setReviewData(prev => ({
       ...prev,
-      comments: prev.comments.filter(c =>
-        !(c.questionId === questionId && c.comment === 'Correct!')
+      comments: prev.comments.map(c =>
+        c.questionId === questionId
+          ? { ...c, isCorrect: null }  // Reset to null instead of removing
+          : c
       )
     }));
   };
 
   const toggleQuestionCorrect = (questionId) => {
-    const correctComment = reviewData.comments?.find(c =>
-      c.questionId === questionId && c.comment === 'Correct!'
-    );
+    const comment = reviewData.comments?.find(c => c.questionId === questionId);
 
-    if (correctComment) {
+    if (comment?.isCorrect === true) {
       removeCorrectMarking(questionId);
     } else {
       markQuestionAsCorrect(questionId);
@@ -1406,7 +1489,9 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
       if (onReviewCompleted) onReviewCompleted();
 
       // Update the alert to show actual sent count
-      const sentCount = questionComments.filter(c => c.comment.trim() !== 'Correct!').length;
+      const sentCount = questionComments.filter(c =>
+        c.feedback && c.feedback.trim() !== '' && c.feedbackVisible === true
+      ).length;
       alert(`Review submitted successfully! Status changed to: ${statusMap[newStatus]}${sentCount > 0 ? ` (${sentCount} feedback messages sent)` : ''}`);
 
     } catch (error) {
@@ -1547,7 +1632,18 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
   // Helper function to check if question is marked correct (for button styling)
   const isQuestionCorrect = (questionId) => {
-    return reviewData.comments?.find(c => c.questionId === questionId && c.comment === 'Correct!');
+    const comment = reviewData.comments?.find(c => c.questionId === questionId);
+    return comment?.isCorrect === true;
+  };
+
+  // NEW helper to get existing comment data for a question
+  const getQuestionCommentData = (questionId) => {
+    return reviewData.comments?.find(c => c.questionId === questionId) || {
+      feedback: '',
+      feedbackVisible: true,
+      correctAnswer: '',
+      isCorrect: null
+    };
   };
 
   // CORRECTED renderAnswerContent function (remove the useEffect from inside)
@@ -2239,103 +2335,152 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                 <div className="flex-1 overflow-y-auto p-4">
                   {/* Two-Column Questions Layout */}
                   <div className="grid grid-cols-2 gap-4">
-                    {getQuestionsForSection(currentViewingSection, selectedSubmission.answers).map((question, index) => (
-                      <div key={question.id} className={`border rounded-lg p-4 bg-white ${isQuestionCorrect(question.id)
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200'
-                        }`}>
-                        {/* Question Header */}
-                        <div className={`-mx-4 -mt-4 px-4 py-2 mb-3 ${isQuestionCorrect(question.id)
-                          ? 'bg-green-100'
-                          : 'bg-gray-50'
-                          }`}>
-                          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                            {isQuestionCorrect(question.id) && (
-                              <CheckCircle className="w-5 h-5 text-green-600" />
-                            )}
-                            Q{index + 1}: {getQuestionText(question.id)}
-                          </h3>
-                        </div>
+                    {getQuestionsForSection(currentViewingSection, selectedSubmission.answers).map((question, index) => {
+                      const commentData = getQuestionCommentData(question.id);
+                      const isMarkedCorrect = commentData.isCorrect === true;
+                      const isMarkedIncorrect = commentData.isCorrect === false;
 
-                        {/* Student Answer */}
-                        <div className="mb-3">
-                          <p className="text-sm font-medium text-gray-700 mb-2">Student Answer:</p>
-                          <div className="bg-gray-50 p-3 rounded border text-sm">
-                            {renderAnswerContent(question, selectedSubmission.answers[question.id])}
+                      return (
+                        <div
+                          key={question.id}
+                          className={`border rounded-lg p-4 bg-white ${isMarkedCorrect ? 'border-green-500 bg-green-50' :
+                            isMarkedIncorrect ? 'border-red-400 bg-red-50' :
+                              'border-gray-200'
+                            }`}
+                        >
+                          {/* Question Header with Correct/Incorrect Buttons */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-2 flex-1">
+                              <span className="text-xs font-medium text-gray-600 bg-white px-2 py-1 rounded">
+                                Q{index + 1}
+                              </span>
+                              {isMarkedCorrect && (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              )}
+                              {isMarkedIncorrect && (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                              <p className="font-medium text-sm text-gray-900">
+                                {question.text}
+                              </p>
+                            </div>
+
+                            {/* Correct/Incorrect Toggle Buttons */}
+                            <div className="flex items-center space-x-1 flex-shrink-0">
+                              <button
+                                onClick={() => markQuestionAsCorrect(question.id)}
+                                className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedCorrect
+                                  ? 'bg-green-600 text-white'
+                                  : 'bg-gray-200 text-gray-700 hover:bg-green-100'
+                                  }`}
+                              >
+                                <CheckCircle className="w-3 h-3" />
+                                <span>Correct</span>
+                              </button>
+                              <button
+                                onClick={() => markQuestionAsIncorrect(question.id)}
+                                className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedIncorrect
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-gray-200 text-gray-700 hover:bg-red-100'
+                                  }`}
+                              >
+                                <XCircle className="w-3 h-3" />
+                                <span>Incorrect</span>
+                              </button>
+                            </div>
                           </div>
 
-                          {/* Practice Answer Comparison */}
-                          {selectedSubmission.type === 'practice' &&
-                            renderPracticeAnswerComparison(question, selectedSubmission.answers[question.id])
-                          }
-                        </div>
+                          {/* Student Answer Display */}
+                          <div className="mb-3">
+                            <p className="text-sm font-medium text-gray-700 mb-2">Student Answer:</p>
+                            <div className="bg-gray-50 p-3 rounded border text-sm">
+                              {renderAnswerContent(question, selectedSubmission.answers[question.id])}
+                            </div>
 
-                        {/* Review Section */}
-                        <div className="space-y-3">
-                          <p className="text-sm font-medium text-gray-700">Your Review:</p>
+                            {/* Practice Answer Comparison */}
+                            {selectedSubmission.type === 'practice' &&
+                              renderPracticeAnswerComparison(question, selectedSubmission.answers[question.id])
+                            }
+                          </div>
 
-                          {/* Feedback text input */}
-                          <input
-                            type="text"
-                            className="w-full p-2 border rounded text-sm"
-                            placeholder="Add feedback..."
-                            data-question-id={question.id}
-                            defaultValue={reviewData.comments?.find(c => c.questionId === question.id)?.comment || ''}
-                          />
-                          {/* Common Feedback Dropdown - only show if options exist */}
-                          {getCommonFeedbackForQuestion(question.id).length > 0 && (
-                            <select
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  const selectedOption = getCommonFeedbackForQuestion(question.id).find(
-                                    option => option.id === parseInt(e.target.value)
-                                  );
-                                  if (selectedOption) {
-                                    selectCommonFeedback(question.id, selectedOption.text);
-                                  }
-                                  setTimeout(() => {
-                                    e.target.value = '';
-                                  }, 100);
-                                }
-                              }}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">Select common feedback...</option>
-                              {getCommonFeedbackForQuestion(question.id).map(option => (
-                                <option key={option.id} value={option.id}>
-                                  {option.title}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                          {/* Feedback Section */}
+                          <div className="space-y-3 border-t pt-3">
+                            {/* Feedback Textarea with Common Feedback Dropdown */}
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs font-medium text-gray-700">
+                                  Feedback for Student
+                                </label>
+                                {/* Common Feedback Dropdown */}
+                                {getCommonFeedbackForQuestion(question.id).length > 0 && (
+                                  <select
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        const selectedOption = getCommonFeedbackForQuestion(question.id).find(
+                                          option => option.id === parseInt(e.target.value)
+                                        );
+                                        if (selectedOption) {
+                                          addComment(question.id, selectedOption.text, commentData.feedbackVisible);
+                                        }
+                                        e.target.value = ''; // Reset dropdown
+                                      }
+                                    }}
+                                    className="text-xs border border-gray-300 rounded px-2 py-1"
+                                  >
+                                    <option value="">Quick Feedback...</option>
+                                    {getCommonFeedbackForQuestion(question.id).map(option => (
+                                      <option key={option.id} value={option.id}>
+                                        {option.title}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
 
-                          {/* Simplified Action Buttons */}
-                          <div className="space-y-2">
-                            {/* Mark Correct Button */}
-                            <button
-                              onClick={() => markQuestionAsCorrect(question.id)}
-                              className="w-full flex items-center justify-center gap-2 bg-green-600 text-white py-2 px-3 rounded text-sm font-medium hover:bg-green-700"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                              Mark Correct
-                            </button>
-                            {/* Submit Feedback Button */}
-                            <button
-                              onClick={() => {
-                                const input = document.querySelector(`input[data-question-id="${question.id}"]`);
-                                if (input && input.value.trim()) {
-                                  addComment(question.id, input.value.trim());
-                                  input.value = '';
-                                }
-                              }}
-                              className="w-full bg-blue-600 text-white py-2 px-3 rounded text-sm font-medium hover:bg-blue-700"
-                            >
-                              Submit Feedback
-                            </button>
+                              <textarea
+                                value={commentData.feedback}
+                                onChange={(e) => addComment(question.id, e.target.value, commentData.feedbackVisible)}
+                                placeholder="Add feedback for the student..."
+                                rows={2}
+                                className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              />
+
+                              {/* Visibility Checkbox */}
+                              <div className="flex items-center space-x-2 mt-2">
+                                <input
+                                  type="checkbox"
+                                  id={`visible-${question.id}`}
+                                  checked={commentData.feedbackVisible}
+                                  onChange={(e) => updateFeedbackVisibility(question.id, e.target.checked)}
+                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                                <label htmlFor={`visible-${question.id}`} className="text-xs text-gray-700">
+                                  Visible to student
+                                </label>
+                              </div>
+                            </div>
+
+                            {/* Correct Answer Field (Director-Only Reference) */}
+                            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                              <label className="text-xs font-medium text-yellow-900 mb-1 flex items-center space-x-1">
+                                <Eye className="w-3 h-3" />
+                                <span>Correct Answer (Director-Only Reference)</span>
+                              </label>
+                              <textarea
+                                value={commentData.correctAnswer}
+                                onChange={(e) => updateCorrectAnswer(question.id, e.target.value)}
+                                placeholder="Enter the correct answer for reference (never shown to students)..."
+                                rows={2}
+                                className="w-full text-sm border border-yellow-300 rounded px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                              />
+                              <p className="text-xs text-yellow-700 mt-1">
+                                ⚠️ This field is only visible to Directors/Instructors, never to students
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Show message if no questions in section */}
