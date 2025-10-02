@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, ChevronDown, CheckCircle, AlertCircle, Save, Eye, AlertTriangle, X, BarChart3, MessageCircle, Clock, RefreshCw, User, Dna, HelpCircle } from 'lucide-react';
+import { FileText, ChevronDown, XCircle, CheckCircle, AlertCircle, Save, Eye, AlertTriangle, X, BarChart3, MessageCircle, Clock, RefreshCw, User, Dna, HelpCircle } from 'lucide-react';
 import MessageModal from './MessageModal';
 import ChromatogramViewer from './ChromatogramViewer';
 import ORFTranslator from './ORFTranslator';
