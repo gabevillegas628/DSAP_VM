@@ -9,6 +9,19 @@ echo "+Installing packages..."
 sudo apt update
 sudo apt install -y nodejs npm postgresql postgresql-contrib pgbouncer
 
+# setup table2asn
+echo "+Setting up NCBI table2asn..."
+TABLE2ASN_URL="https://ftp.ncbi.nlm.nih.gov/asn1-converters/by_program/table2asn/linux64.table2asn.gz"
+wget $TABLE2ASN_URL -O /tmp/table2asn.gz
+gunzip /tmp/table2asn.gz
+chmod +x /tmp/table2asn
+sudo mv /tmp/table2asn /usr/local/bin/table2asn
+# Verify installation
+if command -v table2asn &> /dev/null; then
+    echo "++table2asn installed successfully"
+else
+    echo "++table2asn installation failed"
+
 # Start and enable PostgreSQL
 echo "+Starting PostgreSQL..."
 sudo systemctl start postgresql
