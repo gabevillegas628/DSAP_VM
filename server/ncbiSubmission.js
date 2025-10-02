@@ -158,6 +158,7 @@ const processNCBISubmission = async (sequences, submitterInfo) => {
 
         // Run table2asn
         const result = await runTable2asn(workDir, fastaFile, templateFile);
+        console.log('table2asn result:', result);
 
         if (!result.success) {
             return {
