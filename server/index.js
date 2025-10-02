@@ -2220,20 +2220,28 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
 
 // Download generated .sqn file
 app.get('/api/ncbi/download/:filename', authenticateToken, requireRole(['director']), async (req, res) => {
+  console.log('=== NCBI DOWNLOAD ENDPOINT HIT ===');
+  console.log('Filename requested:', req.params.filename);
+  
   try {
     const { filename } = req.params;
     const sqnPath = path.join(__dirname, 'submissions', filename);
-
-    // Use fsPromises instead of fs
+    
+    console.log('Full path:', sqnPath);
+    
+    // Check if file exists
     const exists = await fsPromises.access(sqnPath).then(() => true).catch(() => false);
-
+    console.log('File exists?', exists);
+    
     if (!exists) {
+      console.log('File not found, returning 404');
       return res.status(404).json({ error: 'File not found' });
     }
 
+    console.log('Attempting download...');
     res.download(sqnPath);
   } catch (error) {
-    console.error('Download error:', error);
+    console.error('DOWNLOAD ENDPOINT ERROR:', error);
     res.status(500).json({ error: error.message });
   }
 });
