@@ -57,6 +57,7 @@ const DirectorCloneLibrary = () => {
   const [selectedForNCBI, setSelectedForNCBI] = useState(new Set());
   const [ncbiSubmissionInProgress, setNCBISubmissionInProgress] = useState(false);
   const [ncbiSubmissionResults, setNCBISubmissionResults] = useState(null);
+  const [programSettings, setProgramSettings] = useState(null);
 
   const checkMissingFiles = async () => {
     setLoadingMissingFiles(true);
@@ -81,6 +82,14 @@ const DirectorCloneLibrary = () => {
     }
   };
 
+  const fetchProgramSettings = async () => {
+    try {
+      const settings = await apiService.get('/program-settings');
+      setProgramSettings(settings);
+    } catch (error) {
+      console.error('Error fetching program settings:', error);
+    }
+  };
 
 
   // Update your useEffect to fetch both normal and practice clones
@@ -88,6 +97,7 @@ const DirectorCloneLibrary = () => {
     fetchUploadedFiles();
     fetchStudents();
     fetchPracticeClones();
+    fetchProgramSettings();
   }, []);
 
   // Reset pagination when search changes
@@ -148,8 +158,6 @@ const DirectorCloneLibrary = () => {
         submitterInfo: submissionData
       });
 
-      setNCBISubmissionResults(response);
-
       // Update local state for successfully submitted files
       if (response.successful && response.successful.length > 0) {
         setUploadedFiles(prev => prev.map(file =>
@@ -159,12 +167,15 @@ const DirectorCloneLibrary = () => {
         ));
       }
 
-      // Clear selection
-      setSelectedForNCBI(new Set());
+      // Return response to modal - DON'T clear selection here
+      return response;
 
     } catch (error) {
       console.error('Error submitting to NCBI:', error);
-      alert('Failed to submit to NCBI: ' + error.message);
+      return {
+        success: false,
+        error: error.message || 'Failed to submit to NCBI'
+      };
     } finally {
       setNCBISubmissionInProgress(false);
     }
@@ -1660,10 +1671,15 @@ const DirectorCloneLibrary = () => {
       />
       <NCBISubmissionModal
         isOpen={showNCBISubmissionModal}
-        onClose={() => setShowNCBISubmissionModal(false)}
+        onClose={() => {
+          setShowNCBISubmissionModal(false);
+          setSelectedForNCBI(new Set()); // Clear selection when modal closes
+        }}
         selectedCount={selectedForNCBI.size}
         onSubmit={submitToNCBI}
         isSubmitting={ncbiSubmissionInProgress}
+        defaultOrganism={programSettings?.organismName || ''}
+        defaultLibraryName={programSettings?.libraryName || ''}
       />
     </>
   );
