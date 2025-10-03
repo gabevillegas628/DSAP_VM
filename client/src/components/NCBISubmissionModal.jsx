@@ -12,6 +12,7 @@ const NCBISubmissionModal = ({
   defaultLibraryName = ''
 }) => {
   const [formData, setFormData] = useState({
+    submissionName: '',
     submitterName: '',
     submitterEmail: '',
     submitterInstitution: '',
@@ -52,6 +53,9 @@ const NCBISubmissionModal = ({
   const validateForm = () => {
     const newErrors = {};
 
+    if (!formData.submissionName.trim()) {
+      newErrors.submissionName = 'Submission name is required';
+    }
     if (!formData.submitterName.trim()) {
       newErrors.submitterName = 'Submitter name is required';
     }
@@ -332,6 +336,25 @@ const NCBISubmissionModal = ({
             </div>
 
             {/* Submitter Information */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Submission Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="submissionName"
+                value={formData.submissionName}
+                onChange={handleChange}
+                placeholder="e.g., Fall_2024_Batch_1"
+                className={`w-full px-3 py-2 border rounded-lg ${errors.submissionName ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                disabled={isSubmitting}
+              />
+              {errors.submissionName && (
+                <p className="text-red-600 text-sm mt-1">{errors.submissionName}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">This will be the filename for your submission</p>
+            </div>
             <div>
               <h4 className="font-semibold text-gray-900 mb-3">Submitter Information</h4>
               <div className="space-y-4">

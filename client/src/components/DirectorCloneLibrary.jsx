@@ -58,6 +58,7 @@ const DirectorCloneLibrary = () => {
   const [ncbiSubmissionInProgress, setNCBISubmissionInProgress] = useState(false);
   const [ncbiSubmissionResults, setNCBISubmissionResults] = useState(null);
   const [programSettings, setProgramSettings] = useState(null);
+  const [ncbiSubmissionFiles, setNCBISubmissionFiles] = useState([]);
 
   const checkMissingFiles = async () => {
     setLoadingMissingFiles(true);
@@ -91,6 +92,16 @@ const DirectorCloneLibrary = () => {
     }
   };
 
+  // Fettch existing NCBI submission files
+  const fetchNCBISubmissionFiles = async () => {
+    try {
+      const files = await apiService.get('/ncbi/submissions');
+      setNCBISubmissionFiles(files);
+    } catch (error) {
+      console.error('Error fetching NCBI submission files:', error);
+    }
+  };
+
 
   // Update your useEffect to fetch both normal and practice clones
   useEffect(() => {
@@ -98,6 +109,7 @@ const DirectorCloneLibrary = () => {
     fetchStudents();
     fetchPracticeClones();
     fetchProgramSettings();
+    fetchNCBISubmissionFiles();
   }, []);
 
   // Reset pagination when search changes
@@ -872,6 +884,34 @@ const DirectorCloneLibrary = () => {
                         + {getClonesReadyForNCBI().length - 5} more...
                       </p>
                     )}
+                  </div>
+                </div>
+              )}
+              {/* Existing NCBI Submission Files */}
+              {ncbiSubmissionFiles.length > 0 && uploadMode === 'regular' && (
+                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-semibold text-green-900 mb-3 flex items-center">
+                    <FileText className="w-5 h-5 mr-2" />
+                    NCBI Submission Files ({ncbiSubmissionFiles.length})
+                  </h4>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {ncbiSubmissionFiles.map((file, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-white p-3 rounded border border-green-200">
+                        <div>
+                          <div className="font-medium text-gray-900">{file.filename}</div>
+                          <div className="text-sm text-gray-600">
+                            {new Date(file.createdAt).toLocaleString()} • {(file.size / 1024).toFixed(1)} KB
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => downloadNCBISubmission(file.filename)}
+                          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center space-x-2"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>Download</span>
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

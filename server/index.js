@@ -24,7 +24,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret'; // Use a secure 
 const IPINFO_TOKEN = process.env.IPINFO_TOKEN;
 
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 
 const {
   findMatchingQuestion,
@@ -2011,7 +2010,9 @@ app.put('/api/uploaded-files/:id/status', authenticateToken, async (req, res) =>
   }
 });
 
-// NCBI Submission endpoint
+// =========================
+// NCBI Submission endpoints
+// =========================
 const { processNCBISubmission, cleanupWorkDir } = require('./ncbiSubmission.js');
 app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async (req, res) => {
   try {
@@ -2019,6 +2020,15 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
 
     if (!fileIds || fileIds.length === 0) {
       return res.status(400).json({ error: 'No files selected for submission' });
+    }
+
+    // Fetch program settings for submitter info
+    const programSettings = await prisma.programSettings.findFirst();
+
+    if (!programSettings || !programSettings.principalInvestigator || !programSettings.orfContactInformation) {
+      return res.status(400).json({
+        error: 'Program settings incomplete. Please set Principal Investigator and ORF Contact Information in Program Settings.'
+      });
     }
 
     // Fetch analysis questions
@@ -2067,6 +2077,28 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       return null;
     };
 
+    // Helper function to extract sequence and correct answer (for feature table)
+    const getSequenceAndAnswer = (answers, questions) => {
+      const editingQuestions = questions.filter(q =>
+        q.step === 'clone-editing' && q.type === 'dna_sequence'
+      );
+
+      for (const question of editingQuestions) {
+        const answer = answers[question.id];
+        if (answer && typeof answer === 'string') {
+          const cleanSequence = answer.replace(/\s/g, '').toUpperCase();
+          // Only accept pure ATGC sequences
+          if (/^[ATGC]+$/.test(cleanSequence) && cleanSequence.length > 50) {
+            return {
+              sequence: cleanSequence,
+              correctAnswer: question.correctAnswer || null // Get the correct answer from the question
+            };
+          }
+        }
+      }
+      return null;
+    };
+
     // Prepare sequences for submission
     const sequences = [];
     const failed = [];
@@ -2079,12 +2111,12 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
         console.error(`Failed to parse analysis data for file ${file.id}`);
       }
 
-      const sequence = getCleanSequence(
+      const result = getSequenceAndAnswer(
         analysisData.answers || {},
         analysisQuestions
       );
 
-      if (!sequence) {
+      if (!result || !result.sequence) {
         failed.push({
           fileId: file.id,
           filename: file.filename,
@@ -2096,7 +2128,8 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       sequences.push({
         id: file.cloneName,
         cloneName: file.cloneName,
-        sequence: sequence,
+        sequence: result.sequence,
+        featureNote: result.correctAnswer,
         organism: submitterInfo.organism,
         isolationSource: submitterInfo.isolationSource,
         collectionDate: submitterInfo.collectionDate,
@@ -2131,7 +2164,9 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
       city: submitterInfo.city || '',
       state: submitterInfo.state || '',
       country: submitterInfo.country || 'USA',
-      postalCode: submitterInfo.postalCode || ''
+      postalCode: submitterInfo.postalCode || '',
+      principalInvestigator: programSettings.principalInvestigator,
+      orfContactInfo: programSettings.orfContactInformation
     };
 
     // Process submission with tbl2asn
@@ -2193,10 +2228,20 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
     }
 
     // Store the .sqn file for later submission
-    const sqnFilename = `ncbi_${Date.now()}.sqn`;
+    const sanitizedName = submitterInfo.submissionName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const sqnFilename = `${sanitizedName}.sqn`;
+    const authorFilename = `${sanitizedName}_seqAuthor.txt`;
+
     const sqnPath = path.join(__dirname, 'submissions', sqnFilename);
+    const authorPath = path.join(__dirname, 'submissions', authorFilename);
+
     await fsPromises.mkdir(path.dirname(sqnPath), { recursive: true });
     await fsPromises.writeFile(sqnPath, result.sqnFile);
+
+    // Copy the seqAuthor.txt file from temp to submissions
+    const tempAuthorFile = path.join(result.workDir, 'seqAuthor.txt');
+    const authorContent = await fsPromises.readFile(tempAuthorFile, 'utf8');
+    await fsPromises.writeFile(authorPath, authorContent, 'utf8');
 
     // Clean up temporary files
     if (result.workDir) {
@@ -2218,32 +2263,105 @@ app.post('/api/ncbi/submit', authenticateToken, requireRole(['director']), async
   }
 });
 
+// List all NCBI submissions
+app.get('/api/ncbi/submissions', authenticateToken, requireRole(['director']), async (req, res) => {
+  try {
+    const submissionsDir = path.join(__dirname, 'submissions');
+    const files = await fsPromises.readdir(submissionsDir);
+
+    const submissions = await Promise.all(
+      files
+        .filter(f => f.endsWith('.sqn'))
+        .map(async filename => {
+          const filePath = path.join(submissionsDir, filename);
+          const stats = await fsPromises.stat(filePath);
+          return {
+            filename,
+            createdAt: stats.birthtime,
+            size: stats.size
+          };
+        })
+    );
+
+    // Sort by date, newest first
+    submissions.sort((a, b) => b.createdAt - a.createdAt);
+
+    res.json(submissions);
+  } catch (error) {
+    console.error('Error listing submissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Download generated .sqn file
 // Done fucking touch this function at all, like ever just leave it alone, it is cursed
+const archiver = require('archiver');
 app.get('/api/ncbi/download/:filename', authenticateToken, requireRole(['director']), async (req, res) => {
   console.log('=== NCBI DOWNLOAD ENDPOINT HIT ===');
   console.log('Filename requested:', req.params.filename);
 
   try {
     const { filename } = req.params;
-    const sqnPath = path.join(__dirname, 'submissions', filename);
 
-    console.log('Full path:', sqnPath);
+    // Get base name without .sqn extension
+    const baseName = filename.replace('.sqn', '');
+    const sqnPath = path.join(__dirname, 'submissions', `${baseName}.sqn`);
+    const authorPath = path.join(__dirname, 'submissions', `${baseName}_seqAuthor.txt`);
 
-    // Check if file exists
-    const exists = await fsPromises.access(sqnPath).then(() => true).catch(() => false);
-    console.log('File exists?', exists);
+    console.log('SQN path:', sqnPath);
+    console.log('Author path:', authorPath);
 
-    if (!exists) {
-      console.log('File not found, returning 404');
-      return res.status(404).json({ error: 'File not found' });
+    // Check if sqn file exists
+    const sqnExists = await fsPromises.access(sqnPath).then(() => true).catch(() => false);
+    console.log('SQN exists?', sqnExists);
+
+    if (!sqnExists) {
+      console.log('SQN file not found, returning 404');
+      return res.status(404).json({ error: 'Submission file not found' });
     }
 
-    console.log('Attempting download...');
-    res.download(sqnPath);
+    // Check if author file exists
+    const authorExists = await fsPromises.access(authorPath).then(() => true).catch(() => false);
+    console.log('Author file exists?', authorExists);
+
+    // Set response headers for zip
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${baseName}.zip"`);
+
+    // Create archive
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    // Handle archive errors
+    archive.on('error', (err) => {
+      console.error('Archive error:', err);
+      throw err;
+    });
+
+    // Pipe archive to response
+    archive.pipe(res);
+
+    // Add sqn file
+    archive.file(sqnPath, { name: `${baseName}.sqn` });
+    console.log('Added SQN to archive');
+
+    // Add author file if it exists
+    if (authorExists) {
+      archive.file(authorPath, { name: 'seqAuthor.txt' });
+      console.log('Added author file to archive');
+    } else {
+      console.log('No author file found, skipping');
+    }
+
+    // Finalize archive
+    console.log('Finalizing archive...');
+    await archive.finalize();
+    console.log('Archive sent successfully');
+
   } catch (error) {
     console.error('DOWNLOAD ENDPOINT ERROR:', error);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 

@@ -69,6 +69,11 @@ const generateFeatureTable = async (sequences, outputPath) => {
         if (seq.clone) {
             lines.push(`\t\t\tclone\t${escapeValue(seq.clone)}`);
         }
+        // ADD FEATURE ANNOTATION if correctAnswer exists
+        if (seq.featureNote && seq.featureNote.trim()) {
+            lines.push(`1\t${seq.sequence.length}\tmisc_feature`);
+            lines.push(`\t\t\tnote\t${escapeValue(seq.featureNote)}`);
+        }
 
         return lines.join('\n');
     }).join('\n\n');
@@ -76,36 +81,79 @@ const generateFeatureTable = async (sequences, outputPath) => {
     await fs.writeFile(outputPath, tableContent, 'utf8');
 };
 
+// Helper to format name as "F. Lastname"
+const formatAuthorName = (fullName) => {
+    if (!fullName || !fullName.trim()) return null;
+
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 0) return null;
+
+    const firstName = parts[0];
+    const lastName = parts[parts.length - 1];
+
+    return `${firstName.charAt(0)}. ${lastName}`;
+};
+
+// Generate seqAuthor file
+const generateSeqAuthorFile = async (sequences, submitterInfo, outputPath) => {
+    const authorContent = sequences.map(seq => {
+        const authors = [];
+
+        // Add student name
+        if (seq.student && seq.student.name) {
+            const formatted = formatAuthorName(seq.student.name);
+            if (formatted) authors.push(formatted);
+        }
+
+        // Add principal investigator
+        if (submitterInfo.principalInvestigator) {
+            const formatted = formatAuthorName(submitterInfo.principalInvestigator);
+            if (formatted) authors.push(formatted);
+        }
+
+        // Add ORF contact
+        if (submitterInfo.orfContact) {
+            const formatted = formatAuthorName(submitterInfo.orfContact);
+            if (formatted) authors.push(formatted);
+        }
+
+        const authorList = authors.join(', ');
+        return `${seq.id}\t"${authorList}"`;
+    }).join('\n');
+
+    await fs.writeFile(outputPath, authorContent, 'utf8');
+};
+
 // Run table2asn command
 const runTable2asn = async (workDir, fastaFile, templateFile) => {
     console.log('\n=== FILES BEFORE TABLE2ASN ===');
     const filesBefore = await fs.readdir(workDir);
     console.log(filesBefore);
-    
+
     const command = `table2asn -indir ${workDir} -t ${templateFile} -V vb -a r -outdir ${workDir}`;
     //                                                                         ^ just 'r' for GenBank only
     console.log('Command:', command);
-    
+
     try {
         const { stdout, stderr } = await execAsync(command, {
             cwd: workDir,
             maxBuffer: 1024 * 1024 * 10,
             timeout: 60000
         });
-        
+
         console.log('=== TABLE2ASN OUTPUT ===');
         console.log('STDOUT:', stdout);
         console.log('STDERR:', stderr);
-        
+
         console.log('\n=== FILES AFTER TABLE2ASN ===');
         const filesAfter = await fs.readdir(workDir);
         console.log(filesAfter);
-        
+
         return { success: true, stdout, stderr };
     } catch (error) {
         console.error('table2asn failed:', error);
-        return { 
-            success: false, 
+        return {
+            success: false,
             error: error.message,
             stderr: error.stderr || ''
         };
@@ -149,6 +197,7 @@ const processNCBISubmission = async (sequences, submitterInfo) => {
     try {
         const fastaFile = path.join(workDir, 'sequences.fsa');
         const featureFile = path.join(workDir, 'sequences.tbl');
+        const authorFile = path.join(workDir, 'sequencesAuthor.txt');
         const templateFile = path.join(__dirname, 'template.sbt');
 
         // Verify template exists
@@ -160,6 +209,7 @@ const processNCBISubmission = async (sequences, submitterInfo) => {
         // Generate input files
         await generateFastaFile(sequences, fastaFile);
         await generateFeatureTable(sequences, featureFile);
+        await generateSeqAuthorFile(sequences, submitterInfo, authorFile);
 
         // Run table2asn
         const result = await runTable2asn(workDir, fastaFile, templateFile);
