@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    container_name: dna-postgres
+    environment:
+      POSTGRES_PASSWORD: changeme_secure_password
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: dna-pgbouncer
+    environment:
+      DATABASE_URL: "postgres://postgres:changeme_secure_password@dna-postgres:5432/postgres"
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 20
+    volumes:
+      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+      - ./userlist.txt:/etc/pgbouncer/userlist.txt
+    ports:
+      - "6432:6432"
+    depends_on:
+      - postgres
+    restart: unless-stopped
