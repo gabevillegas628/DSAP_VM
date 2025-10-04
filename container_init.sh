@@ -16,8 +16,8 @@ podman exec dna-postgres pg_isready -U postgres
 echo "Containers running!"
 
 # Set containers to auto-start on boot
-podman update --restart=always dna-postgres
-podman update --restart=always dna-pgbouncer
+#podman update --restart=always dna-postgres
+#podman update --restart=always dna-pgbouncer
 
 echo "PostgreSQL: localhost:5432"
 echo "PgBouncer: localhost:6432"

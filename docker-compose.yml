@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   postgres:
-    image: postgres:15
+    image: docker.io/library/postgres:15
     container_name: dna-postgres
     environment:
       POSTGRES_PASSWORD: changeme_secure_password
@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
     
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    image: docker.io/edoburu/pgbouncer:latest
     container_name: dna-pgbouncer
     environment:
       DATABASE_URL: "postgres://postgres:changeme_secure_password@dna-postgres:5432/postgres"
