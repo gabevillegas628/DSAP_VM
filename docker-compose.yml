@@ -10,20 +10,18 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
-    
-  pgbouncer:
-    image: docker.io/edoburu/pgbouncer:latest
-    container_name: dna-pgbouncer
-    environment:
-      DATABASE_URL: "postgres://postgres:changeme_secure_password@dna-postgres:5432/postgres"
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: 1000
-      DEFAULT_POOL_SIZE: 20
-    volumes:
-      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
-      - ./userlist.txt:/etc/pgbouncer/userlist.txt
-    ports:
-      - "6432:6432"
-    depends_on:
-      - postgres
-    restart: unless-stopped
+
+pgbouncer:
+  image: docker.io/edoburu/pgbouncer:latest
+  container_name: dna-pgbouncer
+  environment:
+    DATABASE_URL: "postgres://postgres:changeme_secure_password@dna-postgres:5432/postgres"
+    POOL_MODE: transaction
+    MAX_CLIENT_CONN: 1000
+    DEFAULT_POOL_SIZE: 20
+    AUTH_TYPE: scram-sha-256
+  ports:
+    - "6432:6432"
+  depends_on:
+    - postgres
+  restart: unless-stopped
