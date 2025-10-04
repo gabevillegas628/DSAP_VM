@@ -446,26 +446,37 @@ INSTANCE_NAME=${instanceName}
             execSync(`podman exec dna-postgres createdb -U postgres ${dbName}`, { stdio: 'pipe' });
 
             const sqlCommands = `
-            CREATE USER ${dbUser} WITH ENCRYPTED PASSWORD '${dbPassword}';
-            GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${dbUser};
-            ALTER DATABASE ${dbName} OWNER TO ${dbUser};
-        `;
+        CREATE USER ${dbUser} WITH ENCRYPTED PASSWORD '${dbPassword}';
+        GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${dbUser};
+        ALTER DATABASE ${dbName} OWNER TO ${dbUser};
+      `;
 
             execSync(`podman exec dna-postgres psql -U postgres -c "${sqlCommands}"`, { stdio: 'pipe' });
 
-            // Rest stays the same...
             const dbConfig = {
                 name: dbName,
                 user: dbUser,
                 password: dbPassword,
                 host: 'localhost',
-                port: 6432,
-                directPort: 5432,
-                url: `postgresql://${dbUser}:${dbPassword}@localhost:6432/${dbName}?pgbouncer=true`,
-                directUrl: `postgresql://${dbUser}:${dbPassword}@localhost:5432/${dbName}`
+                port: 6432,  // PgBouncer port for runtime
+                directPort: 5432,  // Direct PostgreSQL for setup
+                url: `postgresql://${dbUser}:${dbPassword}@localhost:6432/${dbName}?pgbouncer=true`,  // Runtime URL (PgBouncer)
+                directUrl: `postgresql://${dbUser}:${dbPassword}@localhost:5432/${dbName}`  // Setup URL (direct)
             };
 
-            // Save config as before...
+            if (!fs.existsSync(this.instancesDir)) {
+                fs.mkdirSync(this.instancesDir, { recursive: true });
+            }
+
+            const instanceDir = path.join(this.instancesDir, instanceName);
+            fs.mkdirSync(instanceDir, { recursive: true });
+
+            fs.writeFileSync(
+                path.join(instanceDir, 'db-config.json'),
+                JSON.stringify(dbConfig, null, 2)
+            );
+
+            console.log(`   ✅ Database created: ${dbName}`);
 
         } catch (error) {
             throw new Error(`Database creation failed: ${error.message}`);
