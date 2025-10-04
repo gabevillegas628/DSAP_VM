@@ -289,7 +289,7 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
             console.error('Error sending feedback to discussion:', error);
             throw error;
         }
-    }; f
+    };
 
     const openSequenceAlignment = (question, answer) => {
         setSelectedSequenceData({

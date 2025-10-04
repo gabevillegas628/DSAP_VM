@@ -11,6 +11,8 @@ sudo apt install -y nodejs npm
 # 3. PM2
 sudo npm install -g pm2
 
+#3.5 bcryptjs for password hashing
+sudo npm install bcryptjs
 # 4. table2asn
 wget https://ftp.ncbi.nlm.nih.gov/asn1-converters/by_program/table2asn/linux64.table2asn.gz -O /tmp/table2asn.gz
 gunzip /tmp/table2asn.gz

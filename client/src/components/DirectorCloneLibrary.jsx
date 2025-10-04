@@ -602,6 +602,23 @@ const DirectorCloneLibrary = () => {
     }
   };
 
+  const downloadNCBISubmission = async (sqnFilename) => {
+    try {
+      const blob = await apiService.downloadBlob(`/ncbi/download/${sqnFilename}`);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = sqnFilename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading NCBI submission:', error);
+      alert('Failed to download NCBI submission file');
+    }
+  };
+
   const downloadPracticeClone = async (cloneId, originalName) => {
     try {
       const blob = await apiService.downloadBlob(`/practice-clones/${cloneId}/download`);
