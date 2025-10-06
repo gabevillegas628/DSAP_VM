@@ -1,9 +1,10 @@
 #!/bin/bash
 echo "🚀 Setting up database infrastructure..."
 
-# Clean up
+# Clean up completely
 podman rm -f postgres pgbouncer 2>/dev/null || true
 podman network rm dbnetwork 2>/dev/null || true
+rm -f userlist.txt
 
 # Create network
 podman network create dbnetwork
@@ -21,13 +22,14 @@ podman run -d \
 echo "⏳ Waiting for PostgreSQL..."
 sleep 8
 
-# Get the actual SCRAM password hash for postgres user
-POSTGRES_HASH=$(podman exec postgres psql -U postgres -t -c "SELECT passwd FROM pg_shadow WHERE usename='postgres';")
+# Get the SCRAM hash and strip ALL whitespace
+POSTGRES_HASH=$(podman exec postgres psql -U postgres -t -A -c "SELECT passwd FROM pg_shadow WHERE usename='postgres';" | tr -d '[:space:]')
 
-# Create userlist.txt with the actual hash
-cat > userlist.txt << EOF
-"postgres" "$POSTGRES_HASH"
-EOF
+echo "Creating userlist.txt..."
+echo "\"postgres\" \"${POSTGRES_HASH}\"" > userlist.txt
+
+echo "Userlist contents (should have NO space before SCRAM):"
+cat userlist.txt
 
 # Start PgBouncer
 podman run -d \
@@ -42,5 +44,6 @@ echo "⏳ Waiting for PgBouncer..."
 sleep 5
 
 podman ps
+podman logs pgbouncer | tail -10
 echo ""
-echo "✅ Done! Check: podman logs pgbouncer"
+echo "✅ Done!"
