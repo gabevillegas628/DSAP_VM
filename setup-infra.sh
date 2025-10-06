@@ -18,32 +18,29 @@ podman run -d \
   -v postgres-data:/var/lib/postgresql/data:Z \
   docker.io/library/postgres:15-alpine
 
-echo "⏳ Waiting for PostgreSQL to be ready..."
+echo "⏳ Waiting for PostgreSQL..."
 sleep 8
 
-# Start PgBouncer with auth_query for automatic user authentication
+# Get the actual SCRAM password hash for postgres user
+POSTGRES_HASH=$(podman exec postgres psql -U postgres -t -c "SELECT passwd FROM pg_shadow WHERE usename='postgres';")
+
+# Create userlist.txt with the actual hash
+cat > userlist.txt << EOF
+"postgres" "$POSTGRES_HASH"
+EOF
+
+# Start PgBouncer
 podman run -d \
   --name pgbouncer \
   --network dbnetwork \
   -p 127.0.0.1:6432:5432 \
-  -e DB_HOST=postgres \
-  -e DB_PORT=5432 \
-  -e DB_USER=postgres \
-  -e DB_PASSWORD=postgres \
-  -e DB_NAME=postgres \
-  -e POOL_MODE=transaction \
-  -e MAX_CLIENT_CONN=1000 \
-  -e DEFAULT_POOL_SIZE=25 \
-  -e AUTH_TYPE=md5 \
-  -e AUTH_QUERY="SELECT usename, passwd FROM pg_shadow WHERE usename=$1" \
+  -v $(pwd)/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:Z \
+  -v $(pwd)/userlist.txt:/etc/pgbouncer/userlist.txt:Z \
   docker.io/edoburu/pgbouncer:latest
 
 echo "⏳ Waiting for PgBouncer..."
 sleep 5
 
-echo ""
-echo "✅ Checking status..."
 podman ps
-
 echo ""
-echo "✅ Infrastructure ready!"
+echo "✅ Done! Check: podman logs pgbouncer"
