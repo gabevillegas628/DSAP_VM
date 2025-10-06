@@ -1,6 +1,8 @@
 #!/bin/bash
 # Script to initialize server environment
 # Run from ~/
+# Assumes git clone of repo already done
+# This should NOT be used in prod, this doesn't set up containers and sets up postgres directly on host
 
 echo "Starting server initialization..."
 

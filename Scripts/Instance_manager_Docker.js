@@ -39,7 +39,8 @@ class InstanceManager {
             console.log('3. Quick status check');
             console.log('4. View logs (non-streaming)');
             console.log('5. Start/Stop Instances');
-            console.log('6. Exit');
+            console.log('6. Manage Infrastructure');
+            console.log('7. Exit');
 
             const choice = await this.question('\nEnter choice (1-6): ');
 
@@ -60,6 +61,9 @@ class InstanceManager {
                     await this.resurrectMenu();
                     break;
                 case '6':
+                    await this.manageInfrastructure();
+                    break;
+                case '7':
                     console.log('Goodbye!');
                     running = false;  // Exit the loop
                     break;
@@ -409,6 +413,184 @@ INSTANCE_NAME=${instanceName}
         fs.writeFileSync(path.join(serverDir, '.env'), serverEnv);
         console.log('   ✅ Switched to PgBouncer connection');
     }
+
+    async manageInfrastructure() {
+    console.log('\n🏗️  Infrastructure Management');
+    console.log('============================');
+    console.log('1. Start infrastructure');
+    console.log('2. Stop infrastructure');
+    console.log('3. Restart infrastructure');
+    console.log('4. Check infrastructure status');
+    console.log('5. View logs');
+    console.log('6. Cancel');
+
+    const choice = await this.question('\nEnter choice (1-6): ');
+
+    switch (choice) {
+        case '1':
+            await this.startInfrastructure();
+            break;
+        case '2':
+            await this.stopInfrastructure();
+            break;
+        case '3':
+            await this.restartInfrastructure();
+            break;
+        case '4':
+            this.checkInfrastructureStatus();
+            break;
+        case '5':
+            await this.viewInfrastructureLogs();
+            break;
+        case '6':
+            console.log('Cancelled.');
+            break;
+        default:
+            console.log('Invalid choice.');
+    }
+}
+
+async startInfrastructure() {
+    try {
+        console.log('🚀 Starting infrastructure...');
+        
+        // Check if containers exist but are stopped
+        const postgresExists = execSync('podman ps -a --filter name=postgres --format "{{.Names}}"', { 
+            encoding: 'utf8',
+            stdio: 'pipe' 
+        }).trim();
+        
+        const pgbouncerExists = execSync('podman ps -a --filter name=pgbouncer --format "{{.Names}}"', { 
+            encoding: 'utf8',
+            stdio: 'pipe' 
+        }).trim();
+
+        if (!postgresExists || !pgbouncerExists) {
+            console.log('❌ Infrastructure not set up. Run setup-infra.sh first.');
+            return;
+        }
+
+        execSync('podman start postgres', { stdio: 'inherit' });
+        console.log('⏳ Waiting for PostgreSQL...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        execSync('podman start pgbouncer', { stdio: 'inherit' });
+        console.log('⏳ Waiting for PgBouncer...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        console.log('✅ Infrastructure started');
+    } catch (error) {
+        console.log(`❌ Failed to start infrastructure: ${error.message}`);
+    }
+}
+
+async stopInfrastructure() {
+    try {
+        console.log('🛑 Stopping infrastructure...');
+        execSync('podman stop pgbouncer postgres', { stdio: 'inherit' });
+        console.log('✅ Infrastructure stopped');
+    } catch (error) {
+        console.log(`❌ Failed to stop infrastructure: ${error.message}`);
+    }
+}
+
+async restartInfrastructure() {
+    await this.stopInfrastructure();
+    await this.startInfrastructure();
+}
+
+checkInfrastructureStatus() {
+    try {
+        console.log('\n📊 Infrastructure Status');
+        console.log('========================');
+        execSync('podman ps --filter name=postgres --filter name=pgbouncer', { stdio: 'inherit' });
+    } catch (error) {
+        console.log(`❌ Failed to check status: ${error.message}`);
+    }
+}
+
+async viewInfrastructureLogs() {
+    console.log('\n📋 Which logs?');
+    console.log('1. PostgreSQL');
+    console.log('2. PgBouncer');
+    console.log('3. Both');
+    
+    const choice = await this.question('\nEnter choice (1-3): ');
+    
+    try {
+        switch (choice) {
+            case '1':
+                execSync('podman logs postgres --tail 50', { stdio: 'inherit' });
+                break;
+            case '2':
+                execSync('podman logs pgbouncer --tail 50', { stdio: 'inherit' });
+                break;
+            case '3':
+                console.log('\n=== PostgreSQL Logs ===');
+                execSync('podman logs postgres --tail 30', { stdio: 'inherit' });
+                console.log('\n=== PgBouncer Logs ===');
+                execSync('podman logs pgbouncer --tail 30', { stdio: 'inherit' });
+                break;
+            default:
+                console.log('Invalid choice.');
+        }
+    } catch (error) {
+        console.log(`❌ Failed to view logs: ${error.message}`);
+    }
+}
+
+checkInfrastructure() {
+    try {
+        const postgresRunning = execSync('podman ps --filter name=postgres --format "{{.Names}}"', { 
+            encoding: 'utf8',
+            stdio: 'pipe' 
+        }).trim();
+        
+        const pgbouncerRunning = execSync('podman ps --filter name=pgbouncer --format "{{.Names}}"', { 
+            encoding: 'utf8',
+            stdio: 'pipe' 
+        }).trim();
+
+        if (!postgresRunning || !pgbouncerRunning) {
+            console.log('\n⚠️  Database infrastructure not fully running!');
+            console.log(`PostgreSQL: ${postgresRunning ? '✅ Running' : '❌ Stopped'}`);
+            console.log(`PgBouncer: ${pgbouncerRunning ? '✅ Running' : '❌ Stopped'}`);
+            
+            const answer = this.questionSync('\nWould you like to start it now? (y/n): ');
+            if (answer.toLowerCase() === 'y') {
+                this.startInfrastructure().then(() => {
+                    console.log('Infrastructure started. Continuing...\n');
+                });
+                return false; // Indicate it wasn't running
+            } else {
+                console.log('\nPlease start infrastructure before managing instances.');
+                process.exit(1);
+            }
+        }
+        
+        return true;
+    } catch (error) {
+        console.log('\n❌ Podman not available or infrastructure not set up');
+        console.log('Run setup-infra.sh to initialize the database infrastructure.');
+        process.exit(1);
+    }
+}
+
+// Add synchronous question helper
+questionSync(query) {
+    const readline = require('readline');
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+    
+    return new Promise(resolve => {
+        rl.question(query, answer => {
+            rl.close();
+            resolve(answer);
+        });
+    });
+}
 
     async createDatabase(instanceName) {
         console.log('   📊 Creating database...');

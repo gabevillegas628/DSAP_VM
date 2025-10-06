@@ -1,0 +1,31 @@
+#!/bin/bash
+# vacuum-db.sh - Run VACUUM and ANALYZE on databases
+
+echo "🧹 Running database maintenance..."
+
+if [ -n "$1" ]; then
+    # Specific database
+    databases="$1"
+else
+    # All databases
+    databases=$(podman exec postgres psql -U postgres -t -c "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres');")
+fi
+
+for db in $databases; do
+    echo ""
+    echo "🔧 Maintaining $db..."
+    
+    # VACUUM ANALYZE (reclaims space and updates statistics)
+    if podman exec postgres psql -U postgres -d "$db" -c "VACUUM ANALYZE;" > /dev/null 2>&1; then
+        echo "   ✅ Vacuum complete"
+    else
+        echo "   ❌ Vacuum failed"
+    fi
+    
+    # Show database size
+    size=$(podman exec postgres psql -U postgres -t -c "SELECT pg_size_pretty(pg_database_size('$db'));")
+    echo "   📊 Database size: $size"
+done
+
+echo ""
+echo "✅ Maintenance complete!"
