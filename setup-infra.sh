@@ -5,7 +5,7 @@ echo "🚀 Setting up database infrastructure..."
 podman rm -f postgres pgbouncer 2>/dev/null || true
 podman network rm dbnetwork 2>/dev/null || true
 
-# Create a custom network so containers can talk by name
+# Create network
 podman network create dbnetwork
 
 # Start PostgreSQL
@@ -21,7 +21,7 @@ podman run -d \
 echo "⏳ Waiting for PostgreSQL to be ready..."
 sleep 8
 
-# Start PgBouncer - can use 'postgres' as hostname now
+# Start PgBouncer with auth_query for automatic user authentication
 podman run -d \
   --name pgbouncer \
   --network dbnetwork \
@@ -35,6 +35,7 @@ podman run -d \
   -e MAX_CLIENT_CONN=1000 \
   -e DEFAULT_POOL_SIZE=25 \
   -e AUTH_TYPE=md5 \
+  -e AUTH_QUERY="SELECT usename, passwd FROM pg_shadow WHERE usename=$1" \
   docker.io/edoburu/pgbouncer:latest
 
 echo "⏳ Waiting for PgBouncer..."
@@ -46,4 +47,3 @@ podman ps
 
 echo ""
 echo "✅ Infrastructure ready!"
-echo "Test: PGPASSWORD=postgres psql -h 127.0.0.1 -p 6432 -U postgres -d postgres -c 'SELECT 1;'"
