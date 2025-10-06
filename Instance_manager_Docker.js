@@ -24,6 +24,7 @@ class InstanceManager {
     }
 
     async main() {
+        this.checkInfrastructure();
         console.log('DNA Analysis Instance Manager');
         console.log('================================');
 
@@ -381,34 +382,9 @@ class InstanceManager {
     }
 
     async registerWithPgBouncer(dbName, dbUser, dbPassword) {
-        console.log('   🔌 Registering with PgBouncer...');
-
-        try {
-            // Edit YOUR local pgbouncer.ini - no sudo!
-            const pgbouncerIni = path.join(this.baseDir, 'pgbouncer.ini');
-            const dbEntry = `${dbName} = host=dna-postgres port=5432 dbname=${dbName}`;
-
-            // Add database entry
-            execSync(`sed -i '/^\\[databases\\]/a ${dbEntry}' ${pgbouncerIni}`, { stdio: 'pipe' });
-
-            // Add user to userlist.txt (format: "username" "SCRAM-SHA-256$...")
-            const userlist = path.join(this.baseDir, 'userlist.txt');
-
-            // Get the password hash from PostgreSQL
-            const hashResult = execSync(
-                `podman exec dna-postgres psql -U postgres -t -c "SELECT concat('\"', usename, '\" \"', passwd, '\"') FROM pg_shadow WHERE usename='${dbUser}'"`,
-                { encoding: 'utf8' }
-            ).trim();
-
-            fs.appendFileSync(userlist, hashResult + '\n');
-
-            // Restart PgBouncer container to reload config - no sudo!
-            execSync('podman restart dna-pgbouncer', { stdio: 'pipe' });
-
-            console.log('   ✅ Registered with PgBouncer');
-        } catch (error) {
-            console.log(`   ⚠️  Could not register with PgBouncer: ${error.message}`);
-        }
+        // Not needed with containerized PgBouncer using wildcard database config
+        // The edoburu/pgbouncer image with DATABASE_URL handles all databases automatically
+        console.log('   ✅ PgBouncer configured for all databases');
     }
 
     async switchToPgBouncer(instanceName) {
@@ -442,8 +418,8 @@ INSTANCE_NAME=${instanceName}
         const dbPassword = this.generatePassword();
 
         try {
-            // Use podman exec instead of sudo -u postgres
-            execSync(`podman exec dna-postgres createdb -U postgres ${dbName}`, { stdio: 'pipe' });
+            // Create database using podman exec instead of sudo
+            execSync(`podman exec postgres createdb -U postgres ${dbName}`, { stdio: 'pipe' });
 
             const sqlCommands = `
             CREATE USER ${dbUser} WITH ENCRYPTED PASSWORD '${dbPassword}';
@@ -451,27 +427,39 @@ INSTANCE_NAME=${instanceName}
             ALTER DATABASE ${dbName} OWNER TO ${dbUser};
         `;
 
-            execSync(`podman exec dna-postgres psql -U postgres -c "${sqlCommands}"`, { stdio: 'pipe' });
+            execSync(`podman exec postgres psql -U postgres -c "${sqlCommands}"`, { stdio: 'pipe' });
 
-            // Rest stays the same...
             const dbConfig = {
                 name: dbName,
                 user: dbUser,
                 password: dbPassword,
                 host: 'localhost',
-                port: 6432,
-                directPort: 5432,
+                port: 6432,  // PgBouncer port for runtime
+                directPort: 5432,  // Direct PostgreSQL for setup
                 url: `postgresql://${dbUser}:${dbPassword}@localhost:6432/${dbName}?pgbouncer=true`,
                 directUrl: `postgresql://${dbUser}:${dbPassword}@localhost:5432/${dbName}`
             };
 
-            // Save config as before...
+            if (!fs.existsSync(this.instancesDir)) {
+                fs.mkdirSync(this.instancesDir, { recursive: true });
+            }
+
+            const instanceDir = path.join(this.instancesDir, instanceName);
+            fs.mkdirSync(instanceDir, { recursive: true });
+
+            fs.writeFileSync(
+                path.join(instanceDir, 'db-config.json'),
+                JSON.stringify(dbConfig, null, 2)
+            );
+
+            console.log(`   ✅ Database created: ${dbName}`);
 
         } catch (error) {
             throw new Error(`Database creation failed: ${error.message}`);
         }
 
-        await this.registerWithPgBouncer(dbName, dbUser, dbPassword);
+        // PgBouncer in container with wildcard config doesn't need registration
+        console.log('   ✅ PgBouncer will auto-route to this database');
     }
 
     async setupInstanceFiles(instanceName, port) {
@@ -745,11 +733,11 @@ createDirector();
                 execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
 
                 if (config?.database) {
-                    // Use podman exec instead of sudo -u postgres
-                    execSync(`podman exec dna-postgres dropdb -U postgres ${config.database.name}`, { stdio: 'pipe' });
-                    execSync(`podman exec dna-postgres psql -U postgres -c "DROP USER ${config.database.user}"`, { stdio: 'pipe' });
+                    // Drop database using podman exec
+                    execSync(`podman exec postgres dropdb -U postgres ${config.database.name}`, { stdio: 'pipe' });
+                    execSync(`podman exec postgres psql -U postgres -c "DROP USER IF EXISTS ${config.database.user}"`, { stdio: 'pipe' });
 
-                    await this.unregisterFromPgBouncer(config.database.name, config.database.user);
+                    console.log('   ✅ Database dropped');
                 }
 
                 execSync(`rm -rf ${path.join(this.instancesDir, instanceName)}`, { stdio: 'pipe' });
@@ -760,22 +748,32 @@ createDirector();
         }
     }
 
-    async unregisterFromPgBouncer(dbName, dbUser) {
+    checkInfrastructure() {
         try {
-            // Remove from local files
-            const pgbouncerIni = path.join(this.baseDir, 'pgbouncer.ini');
-            execSync(`sed -i '/${dbName} =/d' ${pgbouncerIni}`, { stdio: 'pipe' });
+            // Check if postgres container is running
+            const result = execSync('podman ps --filter name=postgres --format "{{.Names}}"', {
+                encoding: 'utf8',
+                stdio: 'pipe'
+            }).trim();
 
-            const userlist = path.join(this.baseDir, 'userlist.txt');
-            execSync(`sed -i '/"${dbUser}"/d' ${userlist}`, { stdio: 'pipe' });
+            if (!result.includes('postgres')) {
+                console.log('\n❌ Database infrastructure not running!');
+                console.log('Run: podman pod start dbpod');
+                console.log('Or run setup-infra.sh if not yet created');
+                process.exit(1);
+            }
 
-            // Restart container
-            execSync('podman restart dna-pgbouncer', { stdio: 'pipe' });
-
-            console.log('   ✅ Removed from PgBouncer');
+            return true;
         } catch (error) {
-            console.log(`   ⚠️  Could not unregister from PgBouncer: ${error.message}`);
+            console.log('\n❌ Podman not available or infrastructure not running');
+            console.log('Make sure you have run setup-infra.sh');
+            process.exit(1);
         }
+    }
+
+    async unregisterFromPgBouncer(dbName, dbUser) {
+        // Not needed with containerized setup
+        console.log('   ✅ Database removed (PgBouncer auto-adjusts)');
     }
 
     async cleanupFailedInstance(instanceName) {
