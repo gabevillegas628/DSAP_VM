@@ -36,7 +36,7 @@ podman run -d \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_USER=postgres \
   -v postgres-data:/var/lib/postgresql/data:Z \
-  -v ${SCRIPT_DIR}/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:Z
+  -v ${SCRIPT_DIR}/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:Z \
   docker.io/library/postgres:15-alpine
 
 echo "⏳ Waiting for PostgreSQL..."
