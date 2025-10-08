@@ -4,30 +4,18 @@ echo "🚀 Setting up database infrastructure..."
 # Clean up
 podman rm -f postgres pgbouncer 2>/dev/null || true
 podman network rm dbnetwork 2>/dev/null || true
+podman volume rm postgres-data 2>/dev/null || true
 rm -f userlist.txt pg_hba.conf
 
 # Create network
 podman network create dbnetwork
 
-# Get the actual subnet of the network we just created
 NETWORK_SUBNET=$(podman network inspect dbnetwork --format '{{range .Subnets}}{{.Subnet}}{{end}}')
 echo "Network subnet: $NETWORK_SUBNET"
 
-# Create custom pg_hba.conf that trusts connections from our docker network
-cat > pg_hba.conf << EOF
-# Trust connections from within docker network for auth_query
-host    all             all             ${NETWORK_SUBNET}      trust
-# SCRAM for external connections
-host    all             all             all                     scram-sha-256
-local   all             all                                     trust
-EOF
-
-echo "Generated pg_hba.conf:"
-cat pg_hba.conf
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Start PostgreSQL with custom pg_hba.conf
+# Start PostgreSQL WITHOUT pg_hba.conf first - let it initialize
 podman run -d \
   --name postgres \
   --network dbnetwork \
@@ -36,13 +24,24 @@ podman run -d \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_USER=postgres \
   -v postgres-data:/var/lib/postgresql/data:Z \
-  -v ${SCRIPT_DIR}/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf:Z \
   docker.io/library/postgres:15-alpine
 
-echo "⏳ Waiting for PostgreSQL..."
-sleep 8
+echo "⏳ Waiting for PostgreSQL to initialize..."
+sleep 10
 
-# Reload pg_hba.conf
+# NOW create and copy in the custom pg_hba.conf
+cat > pg_hba.conf << EOF
+# Trust connections from within docker network for auth_query
+host    all             all             ${NETWORK_SUBNET}      trust
+# SCRAM for external connections
+host    all             all             all                     scram-sha-256
+local   all             all                                     trust
+EOF
+
+# Copy it into the running container
+podman cp pg_hba.conf postgres:/var/lib/postgresql/data/pg_hba.conf
+
+# Reload config
 podman exec postgres psql -U postgres -c "SELECT pg_reload_conf();"
 
 # Get hash for userlist
