@@ -33,6 +33,9 @@ sleep 10
 cat > pg_hba.conf << EOF
 # Trust connections from within docker network for auth_query
 host    all             all             ${NETWORK_SUBNET}      trust
+# Trust connections from localhost (for instance setup)
+host    all             all             127.0.0.1/32           trust
+host    all             all             ::1/128                trust
 # SCRAM for external connections
 host    all             all             all                     scram-sha-256
 local   all             all                                     trust
