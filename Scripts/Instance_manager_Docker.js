@@ -585,15 +585,14 @@ INSTANCE_NAME=${instanceName}
 
         try {
             // Create database using podman exec instead of sudo
-            execSync(`podman exec postgres createdb -U postgres ${dbName}`, { stdio: 'pipe' });
-
+            execSync(`podman exec postgres createdb -U postgres ${dbName}`, { stdio: 'inherit' });
             const sqlCommands = `
             CREATE USER ${dbUser} WITH ENCRYPTED PASSWORD '${dbPassword}';
             GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${dbUser};
             ALTER DATABASE ${dbName} OWNER TO ${dbUser};
         `;
 
-            execSync(`podman exec postgres psql -U postgres -c "${sqlCommands}"`, { stdio: 'pipe' });
+            execSync(`podman exec postgres psql -U postgres -c "${sqlCommands}"`, { stdio: 'inherit' });
 
             const dbConfig = {
                 name: dbName,
