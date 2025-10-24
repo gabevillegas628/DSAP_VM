@@ -600,8 +600,8 @@ INSTANCE_NAME=${instanceName}
                 user: dbUser,
                 password: dbPassword,
                 host: '127.0.0.1',
-                port: 6432,  // PgBouncer port for runtime
-                directPort: 5432,  // Direct PostgreSQL for setup
+                port: 16432,  // PgBouncer port for runtime
+                directPort: 15432,  // Direct PostgreSQL for setup
                 url: `postgresql://${dbUser}:${dbPassword}@127.0.0.1:6432/${dbName}?pgbouncer=true`,
                 directUrl: `postgresql://${dbUser}:${dbPassword}@127.0.0.1:5432/${dbName}`
             };

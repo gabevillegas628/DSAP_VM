@@ -20,7 +20,7 @@ podman run -d \
   --name postgres \
   --network dbnetwork \
   --restart=unless-stopped \
-  -p 127.0.0.1:5432:5432 \
+  -p 127.0.0.1:15432:5432 \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_USER=postgres \
   -v postgres-data:/var/lib/postgresql/data:Z \
@@ -53,7 +53,7 @@ podman run -d \
   --name pgbouncer \
   --network dbnetwork \
   --restart=unless-stopped \
-  -p 127.0.0.1:6432:5432 \
+  -p 127.0.0.1:16432:5432 \
   -v ${SCRIPT_DIR}/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:Z \
   -v ${SCRIPT_DIR}/userlist.txt:/etc/pgbouncer/userlist.txt:Z \
   docker.io/edoburu/pgbouncer:latest
