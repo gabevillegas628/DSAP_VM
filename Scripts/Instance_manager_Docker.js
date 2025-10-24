@@ -583,16 +583,23 @@ INSTANCE_NAME=${instanceName}
         const dbUser = `${instanceName.toLowerCase()}_user`;
         const dbPassword = this.generatePassword();
 
+        console.log(`   DEBUG: dbName=${dbName}, dbUser=${dbUser}, password=${dbPassword}`);
+
         try {
             // Create database using podman exec instead of sudo
+            console.log('   DEBUG: Running createdb...');
             execSync(`podman exec postgres createdb -U postgres ${dbName}`, { stdio: 'inherit' });
+            console.log('   DEBUG: createdb completed');
+
             const sqlCommands = `
             CREATE USER ${dbUser} WITH ENCRYPTED PASSWORD '${dbPassword}';
             GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${dbUser};
             ALTER DATABASE ${dbName} OWNER TO ${dbUser};
         `;
 
+            console.log('   DEBUG: Running SQL commands...');
             execSync(`podman exec postgres psql -U postgres -c "${sqlCommands}"`, { stdio: 'inherit' });
+            console.log('   DEBUG: SQL commands completed');
 
             const dbConfig = {
                 name: dbName,
