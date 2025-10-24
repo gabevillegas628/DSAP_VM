@@ -608,8 +608,8 @@ INSTANCE_NAME=${instanceName}
                 host: '127.0.0.1',
                 port: 16432,  // PgBouncer port for runtime
                 directPort: 15432,  // Direct PostgreSQL for setup
-                url: `postgresql://${dbUser}:${dbPassword}@127.0.0.1:6432/${dbName}?pgbouncer=true`,
-                directUrl: `postgresql://${dbUser}:${dbPassword}@127.0.0.1:5432/${dbName}`
+                url: `postgresql://${dbUser}:${dbPassword}@127.0.0.1:16432/${dbName}?pgbouncer=true`,
+                directUrl: `postgresql://${dbUser}:${dbPassword}@127.0.0.1:15432/${dbName}`
             };
 
             if (!fs.existsSync(this.instancesDir)) {
