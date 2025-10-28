@@ -1024,7 +1024,7 @@ createDirector();
         const newPort = parseInt(newPortInput);
 
         // Validate port
-        if (isNaN(newPort) || newPort < 1024 || newPort > 65535) {
+        if (isNaN(newPort) || newPort < 400 || newPort > 65535) {
             console.log('❌ Invalid port. Must be between 1024-65535.');
             return;
         }
