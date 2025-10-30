@@ -62,10 +62,10 @@ const SubmitConfirmationModal = ({ isOpen, onClose, onConfirm, cloneName, progre
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="text-sm font-medium text-blue-900 mb-2">What happens next:</h4>
             <ul className="space-y-1 text-sm text-blue-800">
-              <li>• Your analysis will be submitted to instructors</li>
-              <li>• You won't be able to edit until review is complete</li>
-              <li>• You'll receive feedback through the messaging system</li>
-              <li>• If changes are needed, editing will be re-enabled</li>
+              <li>â€¢ Your analysis will be submitted to instructors</li>
+              <li>â€¢ You won't be able to edit until review is complete</li>
+              <li>â€¢ You'll receive feedback through the messaging system</li>
+              <li>â€¢ If changes are needed, editing will be re-enabled</li>
             </ul>
           </div>
         </div>
@@ -702,6 +702,17 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
       }
     } catch (error) {
       console.error('Error checking for unread feedback:', error);
+    }
+  };
+
+  // Handle link clicks to open in new tab
+  const handleLinkClick = (e) => {
+    if (e.target.tagName === 'A') {
+      e.preventDefault();
+      const href = e.target.getAttribute('href');
+      if (href) {
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -1356,9 +1367,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
     if (question.type === 'text_header') {
       return (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-            {question.text}
-          </h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
         </div>
       );
     }
@@ -1662,9 +1671,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                         comment.isCorrect === false ? 'text-red-800' :
                           'text-blue-800'
                         }`}>
-                        {comment.isCorrect === true ? '✓ Correct' :
-                          comment.isCorrect === false ? '✗ Needs Improvement' :
-                            'ℹ Instructor Feedback'}
+                        {comment.isCorrect === true ? 'âœ“ Correct' :
+                          comment.isCorrect === false ? 'âœ— Needs Improvement' :
+                            'â„¹ Instructor Feedback'}
                       </span>
                     </div>
 
@@ -1772,7 +1781,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
       <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center space-x-2 mb-4">
           <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-          <h4 className="text-lg font-medium text-blue-900">{question.text}</h4>
+          <h4 className="text-lg font-medium text-blue-900" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
           <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
             Analysis Tool
           </span>
@@ -1943,7 +1952,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
       <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center space-x-2 mb-4">
           <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-          <h4 className="text-lg font-medium text-blue-900">{question.text}</h4>
+          <h4 className="text-lg font-medium text-blue-900" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
           <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
             Interactive Tool
           </span>
@@ -1951,7 +1960,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
         {!sourceAnswer ? (
           <div className="text-sm text-gray-500 italic bg-gray-50 p-3 rounded">
-            Sequence will appear here once you complete the source question: {sourceQuestion?.text}
+            Sequence will appear here once you complete the source question: <span dangerouslySetInnerHTML={{ __html: sourceQuestion?.text || '' }} />
           </div>
         ) : (
           <div className="space-y-4">
@@ -2040,7 +2049,17 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
 
   return (
-    <div className="flex items-start space-x-4">
+    <>
+      <style>{`
+        .text-gray-700 a, .text-blue-900 a, .text-gray-800 a {
+          color: #2563eb;
+          text-decoration: underline;
+        }
+        .text-gray-700 a:hover, .text-blue-900 a:hover, .text-gray-800 a:hover {
+          color: #1d4ed8;
+        }
+      `}</style>
+      <div className="flex items-start space-x-4">
       {/* Main Interface */}
       <div className="flex-1">
         <div className="bg-white rounded-xl shadow-sm border">
@@ -2053,10 +2072,10 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                     Analyzing {cloneData.cloneName}
                   </h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    File: {cloneData.filename} • Progress: {getOverallProgress()}%
+                    File: {cloneData.filename} â€¢ Progress: {getOverallProgress()}%
                     {lastSaved && (
                       <span className="text-green-600 ml-2">
-                        • Auto-saved at {lastSaved instanceof Date ? lastSaved.toLocaleTimeString() : 'unknown time'}
+                        â€¢ Auto-saved at {lastSaved instanceof Date ? lastSaved.toLocaleTimeString() : 'unknown time'}
                       </span>
                     )}
                   </p>
@@ -2158,7 +2177,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                       <div>
                                         <p className="text-sm font-medium">{group.name}</p>
                                         <p className={`text-xs ${isCurrentGroup ? 'text-emerald-200' : 'text-gray-500'}`}>
-                                          {group.questions.length} question{group.questions.length !== 1 ? 's' : ''} • {groupProgress}%
+                                          {group.questions.length} question{group.questions.length !== 1 ? 's' : ''} â€¢ {groupProgress}%
                                         </p>
                                       </div>
                                     </div>
@@ -2348,7 +2367,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                   'Pending'}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap">{question.text}</p>
+                          <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
                           {renderQuestion(question)}
                         </div>
                       );
@@ -2399,7 +2418,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                   'Pending'}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap">{question.text}</p>
+                          <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
                           {renderQuestion(question)}
                         </div>
                       );
@@ -2463,7 +2482,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                       'Pending'}
                                 </span>
                               </div>
-                              <p className="text-sm text-gray-700 mb-3 whitespace-pre-wrap">{question.text}</p>
+                              <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
                               {renderQuestion(question)}
                             </div>
                           );
@@ -2685,8 +2704,16 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
         initialSequence=""
       />
     </div>
+    </>
   );
 };
 
 
 export default DNAAnalysisInterface;
+
+/* Add this style tag at the end of the component to style formatted question text */
+const questionTextStyles = `
+  .text-gray-700 a, .text-blue-900 a {
+    color: #2563eb;
+    text-decoration: underline;
+  }`;

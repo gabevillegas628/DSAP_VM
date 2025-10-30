@@ -182,7 +182,7 @@ class InstanceManager {
             await this.createDirectorAccount(instanceName, directorName, directorEmail, finalPassword);
             await this.switchToPgBouncer(instanceName);
             await this.buildFrontend(instanceName);
-            await this.configureFirewall(port);
+            //await this.configureFirewall(port);
             await this.startInstance(instanceName, port);
 
             console.log('\n🎉 Instance created successfully!');
@@ -1024,7 +1024,7 @@ createDirector();
         const newPort = parseInt(newPortInput);
 
         // Validate port
-        if (isNaN(newPort) || newPort < 400 || newPort > 65535) {
+        if (isNaN(newPort) || newPort < 1024 || newPort > 65535) {
             console.log('❌ Invalid port. Must be between 1024-65535.');
             return;
         }
@@ -1071,7 +1071,7 @@ createDirector();
             fs.writeFileSync(envPath, envContent);
 
             // Configure firewall
-            await this.configureFirewall(newPort);
+            //await this.configureFirewall(newPort);
 
             // Delete old PM2 process and start fresh
             try {
@@ -1138,7 +1138,7 @@ createDirector();
                         continue;
                     }
 
-                    await this.configureFirewall(config.port);
+                    //await this.configureFirewall(config.port);
 
                     execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
@@ -1246,7 +1246,7 @@ createDirector();
                         continue;
                     }
 
-                    await this.configureFirewall(config.port);
+                    //await this.configureFirewall(config.port);
 
                     execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);

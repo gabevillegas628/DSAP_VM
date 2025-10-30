@@ -1,8 +1,109 @@
 // components/DirectorEditQuestions.jsx - Updated to use apiService
-import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Edit, Trash2, AlertCircle, Bold, Italic, Underline, Link as LinkIcon } from 'lucide-react';
 import apiService from '../services/apiService';
 
+// Rich Text Editor Component
+const RichTextEditor = ({ value, onChange }) => {
+  const editorRef = useRef(null);
+  const isInitialMount = useRef(true);
+
+  // Only set innerHTML on initial mount or when value changes externally
+  useEffect(() => {
+    if (editorRef.current && isInitialMount.current) {
+      editorRef.current.innerHTML = value || '';
+      isInitialMount.current = false;
+    }
+  }, []);
+
+  // Update innerHTML only when opening a different question to edit
+  useEffect(() => {
+    if (editorRef.current && !isInitialMount.current) {
+      // Only update if the content is significantly different (prevents cursor jump during typing)
+      const currentContent = editorRef.current.innerHTML;
+      if (value !== currentContent && document.activeElement !== editorRef.current) {
+        editorRef.current.innerHTML = value || '';
+      }
+    }
+  }, [value]);
+
+  const execCommand = (command, value = null) => {
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const insertLink = () => {
+    const url = prompt('Enter URL:');
+    if (url) {
+      execCommand('createLink', url);
+    }
+  };
+
+  const handleInput = () => {
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  return (
+    <div className="border border-gray-300 rounded-lg overflow-hidden">
+      <div className="flex items-center space-x-1 p-2 bg-gray-50 border-b border-gray-300">
+        <button
+          type="button"
+          onClick={() => execCommand('bold')}
+          className="p-2 hover:bg-gray-200 rounded transition"
+          title="Bold"
+        >
+          <Bold className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => execCommand('italic')}
+          className="p-2 hover:bg-gray-200 rounded transition"
+          title="Italic"
+        >
+          <Italic className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => execCommand('underline')}
+          className="p-2 hover:bg-gray-200 rounded transition"
+          title="Underline"
+        >
+          <Underline className="w-4 h-4" />
+        </button>
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+        <button
+          type="button"
+          onClick={insertLink}
+          className="p-2 hover:bg-gray-200 rounded transition"
+          title="Insert Link"
+        >
+          <LinkIcon className="w-4 h-4" />
+        </button>
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
+        className="p-3 min-h-[100px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        style={{ wordBreak: 'break-word' }}
+        suppressContentEditableWarning={true}
+      />
+      <style>{`
+        div[contenteditable] a {
+          color: #2563eb;
+          text-decoration: underline;
+        }
+        div[contenteditable] a:hover {
+          color: #1d4ed8;
+        }
+      `}</style>
+    </div>
+  );
+};
 
 const DirectorEditQuestions = () => {
   const [analysisQuestions, setAnalysisQuestions] = useState([]);
@@ -141,6 +242,25 @@ const DirectorEditQuestions = () => {
   };
 
   const editAnalysisQuestion = (question) => {
+    // If already editing this question, close the edit form
+    if (editingAnalysisQuestion === question.id) {
+      setEditingAnalysisQuestion(null);
+      setNewAnalysisQuestion({
+        step: 'clone-editing',
+        text: '',
+        type: 'yes_no',
+        required: true,
+        order: 1,
+        conditionalLogic: null,
+        options: [],
+        blastResultsCount: 3,
+        blastTitle: '',
+        questionGroup: '',
+        groupOrder: 0
+      });
+      return;
+    }
+
     setEditingAnalysisQuestion(question.id);
 
     let optionsToSet = {};
@@ -173,7 +293,6 @@ const DirectorEditQuestions = () => {
       questionGroup: question.questionGroup || '',
       groupOrder: question.groupOrder || 0
     });
-    setShowAnalysisQuestionForm(true);
   };
 
   const saveEditedQuestion = async () => {
@@ -411,12 +530,9 @@ const DirectorEditQuestions = () => {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Question Text</label>
-                    <textarea
+                    <RichTextEditor
                       value={newAnalysisQuestion.text}
-                      onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, text: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      rows="3"
-                      placeholder="Enter your question..."
+                      onChange={(html) => setNewAnalysisQuestion({ ...newAnalysisQuestion, text: html })}
                     />
                   </div>
 
@@ -602,7 +718,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.blastQuestion1Id && newAnalysisQuestion.options?.blastQuestion2Id && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          ✓ Comparison will show results from these two BLAST questions side by side
+                          âœ“ Comparison will show results from these two BLAST questions side by side
                         </div>
                       )}
                     </div>
@@ -641,7 +757,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.sourceQuestionId && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          ✓ Will display sequence from the selected question for highlighting
+                          âœ“ Will display sequence from the selected question for highlighting
                         </div>
                       )}
                     </div>
@@ -793,37 +909,141 @@ const DirectorEditQuestions = () => {
                           {questions
                             .sort((a, b) => a.order - b.order)
                             .map(question => (
-                              <div key={question.id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded">
-                                <div className="flex-1">
-                                  <p className="font-medium text-gray-900">{question.text}</p>
-                                  <div className="flex items-center space-x-2 mt-1">
-                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">{question.type}</span>
-                                    {question.required && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Required</span>}
-                                    {question.conditionalLogic && (
-                                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                                        Conditional
-                                      </span>
-                                    )}
-                                    <span className="text-xs text-gray-500">Order: {question.order}</span>
-                                    {question.questionGroup && (
-                                      <span className="text-xs text-gray-500">Group Order: {question.groupOrder}</span>
-                                    )}
+                              <div key={question.id}>
+                                <div className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded">
+                                  <div className="flex-1">
+                                    <div className="font-medium text-gray-900" dangerouslySetInnerHTML={{ __html: question.text }} />
+                                    <div className="flex items-center space-x-2 mt-1">
+                                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">{question.type}</span>
+                                      {question.required && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Required</span>}
+                                      {question.conditionalLogic && (
+                                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                                          Conditional
+                                        </span>
+                                      )}
+                                      <span className="text-xs text-gray-500">Order: {question.order}</span>
+                                      {question.questionGroup && (
+                                        <span className="text-xs text-gray-500">Group Order: {question.groupOrder}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex space-x-2 ml-4">
+                                    <button
+                                      onClick={() => editAnalysisQuestion(question)}
+                                      className={`${editingAnalysisQuestion === question.id ? 'text-indigo-800 bg-indigo-100' : 'text-indigo-600'} hover:text-indigo-800 p-1 rounded`}
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteAnalysisQuestion(question.id)}
+                                      className="text-red-600 hover:text-red-800 p-1 rounded"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 </div>
-                                <div className="flex space-x-2 ml-4">
-                                  <button
-                                    onClick={() => editAnalysisQuestion(question)}
-                                    className="text-indigo-600 hover:text-indigo-800"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => deleteAnalysisQuestion(question.id)}
-                                    className="text-red-600 hover:text-red-800"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
+                                
+                                {/* Inline Edit Form */}
+                                {editingAnalysisQuestion === question.id && (
+                                  <div className="mt-2 ml-4 bg-indigo-50 border-2 border-indigo-300 rounded-lg p-4">
+                                    <h5 className="text-sm font-semibold text-indigo-900 mb-3">Edit Question</h5>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Question Text</label>
+                                        <RichTextEditor
+                                          value={newAnalysisQuestion.text}
+                                          onChange={(html) => setNewAnalysisQuestion({ ...newAnalysisQuestion, text: html })}
+                                        />
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">Step</label>
+                                          <select
+                                            value={newAnalysisQuestion.step}
+                                            onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, step: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                          >
+                                            <option value="clone-editing">Clone Editing</option>
+                                            <option value="blast">BLAST</option>
+                                            <option value="analysis-submission">Analysis Submission</option>
+                                            <option value="review">Review</option>
+                                          </select>
+                                        </div>
+
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">Question Type</label>
+                                          <select
+                                            value={newAnalysisQuestion.type}
+                                            onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, type: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                          >
+                                            <option value="text">Text</option>
+                                            <option value="yes_no">Yes/No</option>
+                                            <option value="select">Select</option>
+                                            <option value="blast">BLAST</option>
+                                            <option value="blast_comparison">BLAST Comparison</option>
+                                            <option value="sequence_range">Sequence Range</option>
+                                            <option value="sequence_display">Sequence Display</option>
+                                          </select>
+                                        </div>
+
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">Order</label>
+                                          <input
+                                            type="number"
+                                            value={newAnalysisQuestion.order}
+                                            onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, order: parseInt(e.target.value) })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                          />
+                                        </div>
+
+                                        <div className="flex items-center">
+                                          <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={newAnalysisQuestion.required}
+                                              onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, required: e.target.checked })}
+                                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <span className="text-sm font-medium text-gray-700">Required</span>
+                                          </label>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex justify-end space-x-2 pt-3 border-t border-indigo-200">
+                                        <button
+                                          onClick={() => {
+                                            setEditingAnalysisQuestion(null);
+                                            setNewAnalysisQuestion({
+                                              step: 'clone-editing',
+                                              text: '',
+                                              type: 'yes_no',
+                                              required: true,
+                                              order: 1,
+                                              conditionalLogic: null,
+                                              options: [],
+                                              blastResultsCount: 3,
+                                              blastTitle: '',
+                                              questionGroup: '',
+                                              groupOrder: 0
+                                            });
+                                          }}
+                                          className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          onClick={saveEditedQuestion}
+                                          disabled={!newAnalysisQuestion.text.trim()}
+                                          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-300"
+                                        >
+                                          Save Changes
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ))}
                         </div>
