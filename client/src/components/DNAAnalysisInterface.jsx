@@ -2058,6 +2058,59 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
         .text-gray-700 a:hover, .text-blue-900 a:hover, .text-gray-800 a:hover {
           color: #1d4ed8;
         }
+        .text-gray-700 ul, .text-blue-900 ul, .text-gray-800 ul {
+          list-style-type: disc;
+          margin-left: 1.5rem;
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        .text-gray-700 ol, .text-blue-900 ol, .text-gray-800 ol {
+          list-style-type: decimal;
+          margin-left: 1.5rem;
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        .text-gray-700 ol ol, .text-blue-900 ol ol, .text-gray-800 ol ol {
+          list-style-type: lower-alpha;
+          margin-left: 2.5rem;
+        }
+        .text-gray-700 ol ol ol, .text-blue-900 ol ol ol, .text-gray-800 ol ol ol {
+          list-style-type: lower-roman;
+          margin-left: 2.5rem;
+        }
+        .text-gray-700 ul ul, .text-blue-900 ul ul, .text-gray-800 ul ul {
+          list-style-type: circle;
+          margin-left: 2.5rem;
+        }
+        .text-gray-700 ul ul ul, .text-blue-900 ul ul ul, .text-gray-800 ul ul ul {
+          list-style-type: square;
+          margin-left: 2.5rem;
+        }
+        .text-gray-700 ol.lettered-list, .text-blue-900 ol.lettered-list, .text-gray-800 ol.lettered-list {
+          list-style: none;
+          counter-reset: lettered-counter;
+        }
+        .text-gray-700 ol.lettered-list > li, .text-blue-900 ol.lettered-list > li, .text-gray-800 ol.lettered-list > li {
+          counter-increment: lettered-counter;
+        }
+        .text-gray-700 ol.lettered-list > li::before, .text-blue-900 ol.lettered-list > li::before, .text-gray-800 ol.lettered-list > li::before {
+          content: counter(lettered-counter, upper-alpha) ") ";
+          font-weight: normal;
+        }
+        .text-gray-700 ol.lettered-list ol, .text-blue-900 ol.lettered-list ol, .text-gray-800 ol.lettered-list ol {
+          list-style-type: lower-roman;
+          margin-left: 2.5rem;
+        }
+        .text-gray-700 ol.lettered-list ol li::before, .text-blue-900 ol.lettered-list ol li::before, .text-gray-800 ol.lettered-list ol li::before {
+          content: none;
+        }
+        .text-gray-700 ol.lettered-list ol ol, .text-blue-900 ol.lettered-list ol ol, .text-gray-800 ol.lettered-list ol ol {
+          list-style-type: square;
+          margin-left: 2.5rem;
+        }
+        .text-gray-700 li, .text-blue-900 li, .text-gray-800 li {
+          margin-bottom: 0.25rem;
+        }
       `}</style>
       <div className="flex items-start space-x-4">
       {/* Main Interface */}
@@ -2710,10 +2763,3 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
 
 export default DNAAnalysisInterface;
-
-/* Add this style tag at the end of the component to style formatted question text */
-const questionTextStyles = `
-  .text-gray-700 a, .text-blue-900 a {
-    color: #2563eb;
-    text-decoration: underline;
-  }`;

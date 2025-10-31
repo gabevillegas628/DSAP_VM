@@ -1,6 +1,6 @@
 // components/DirectorEditQuestions.jsx - Updated to use apiService
 import React, { useState, useEffect, useRef } from 'react';
-import { Edit, Trash2, AlertCircle, Bold, Italic, Underline, Link as LinkIcon } from 'lucide-react';
+import { Edit, Trash2, AlertCircle, Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered } from 'lucide-react';
 import apiService from '../services/apiService';
 
 // Rich Text Editor Component
@@ -34,6 +34,27 @@ const RichTextEditor = ({ value, onChange }) => {
     }
   };
 
+  const insertLettered = () => {
+    // Create a lettered list
+    document.execCommand('insertOrderedList', false, null);
+    // Get the newly created list and add the custom class
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      let node = selection.getRangeAt(0).startContainer;
+      // Walk up to find the <ol> element
+      while (node && node.nodeName !== 'OL') {
+        node = node.parentNode;
+        if (node === editorRef.current) break;
+      }
+      if (node && node.nodeName === 'OL') {
+        node.className = 'lettered-list';
+      }
+    }
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
   const insertLink = () => {
     const url = prompt('Enter URL:');
     if (url) {
@@ -44,6 +65,18 @@ const RichTextEditor = ({ value, onChange }) => {
   const handleInput = () => {
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    // Handle Tab and Shift+Tab for list indentation
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        execCommand('outdent');
+      } else {
+        execCommand('indent');
+      }
     }
   };
 
@@ -77,6 +110,31 @@ const RichTextEditor = ({ value, onChange }) => {
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
         <button
           type="button"
+          onClick={() => execCommand('insertUnorderedList')}
+          className="p-2 hover:bg-gray-200 rounded transition"
+          title="Bullet List (Tab to indent)"
+        >
+          <List className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => execCommand('insertOrderedList')}
+          className="p-2 hover:bg-gray-200 rounded transition"
+          title="Numbered List (Tab to indent)"
+        >
+          <ListOrdered className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={insertLettered}
+          className="p-2 hover:bg-gray-200 rounded transition font-semibold text-sm"
+          title="Lettered List (Tab to indent)"
+        >
+          A)
+        </button>
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+        <button
+          type="button"
           onClick={insertLink}
           className="p-2 hover:bg-gray-200 rounded transition"
           title="Insert Link"
@@ -88,7 +146,8 @@ const RichTextEditor = ({ value, onChange }) => {
         ref={editorRef}
         contentEditable
         onInput={handleInput}
-        className="p-3 min-h-[100px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        onKeyDown={handleKeyDown}
+        className="p-3 min-h-[100px] bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
         style={{ wordBreak: 'break-word' }}
         suppressContentEditableWarning={true}
       />
@@ -99,6 +158,59 @@ const RichTextEditor = ({ value, onChange }) => {
         }
         div[contenteditable] a:hover {
           color: #1d4ed8;
+        }
+        div[contenteditable] ul {
+          list-style-type: disc;
+          margin-left: 1.5rem;
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        div[contenteditable] ol {
+          list-style-type: decimal;
+          margin-left: 1.5rem;
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        div[contenteditable] ol ol {
+          list-style-type: lower-alpha;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ol ol ol {
+          list-style-type: lower-roman;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ul ul {
+          list-style-type: circle;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ul ul ul {
+          list-style-type: square;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ol.lettered-list {
+          list-style: none;
+          counter-reset: lettered-counter;
+        }
+        div[contenteditable] ol.lettered-list > li {
+          counter-increment: lettered-counter;
+        }
+        div[contenteditable] ol.lettered-list > li::before {
+          content: counter(lettered-counter, upper-alpha) ") ";
+          font-weight: normal;
+        }
+        div[contenteditable] ol.lettered-list ol {
+          list-style-type: lower-roman;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ol.lettered-list ol li::before {
+          content: none;
+        }
+        div[contenteditable] ol.lettered-list ol ol {
+          list-style-type: square;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] li {
+          margin-bottom: 0.25rem;
         }
       `}</style>
     </div>
