@@ -1,6 +1,6 @@
 // components/DirectorEditQuestions.jsx - Updated to use apiService
 import React, { useState, useEffect, useRef } from 'react';
-import { Edit, Trash2, AlertCircle, Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered } from 'lucide-react';
+import { Edit, Trash2, AlertCircle, Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered, GripVertical } from 'lucide-react';
 import apiService from '../services/apiService';
 
 // Rich Text Editor Component
@@ -233,8 +233,15 @@ const DirectorEditQuestions = () => {
     blastResultsCount: 3,
     blastTitle: '',
     questionGroup: '',
-    groupOrder: 0
+    groupOrder: 999
   });
+
+  // Drag and drop state
+  const [draggedQuestion, setDraggedQuestion] = useState(null);
+  const [dragOverQuestion, setDragOverQuestion] = useState(null);
+
+  // Group management state
+  const [managingGroupsForStep, setManagingGroupsForStep] = useState(null);
 
   // Fetch analysis questions from API
   useEffect(() => {
@@ -274,7 +281,7 @@ const DirectorEditQuestions = () => {
                     sourceQuestionId: newAnalysisQuestion.options?.sourceQuestionId
                   } : undefined,
           questionGroup: newAnalysisQuestion.questionGroup || null,
-          groupOrder: newAnalysisQuestion.groupOrder || 0
+          
         };
 
         const question = await apiService.post('/analysis-questions', questionData);
@@ -290,8 +297,7 @@ const DirectorEditQuestions = () => {
           options: [],
           blastResultsCount: 5,
           blastTitle: '',
-          questionGroup: '',
-          groupOrder: 0
+          questionGroup: ''
         });
       } catch (error) {
         console.error('Error adding analysis question:', error);
@@ -367,8 +373,7 @@ const DirectorEditQuestions = () => {
         options: [],
         blastResultsCount: 3,
         blastTitle: '',
-        questionGroup: '',
-        groupOrder: 0
+        questionGroup: ''
       });
       return;
     }
@@ -403,7 +408,7 @@ const DirectorEditQuestions = () => {
       blastResultsCount: question.options?.blastResultsCount || 5,
       blastTitle: question.options?.blastTitle || '',
       questionGroup: question.questionGroup || '',
-      groupOrder: question.groupOrder || 0
+      groupOrder: question.groupOrder || 999
     });
   };
 
@@ -425,7 +430,7 @@ const DirectorEditQuestions = () => {
                 label2: newAnalysisQuestion.options?.label2 || 'End'
               } : undefined,
         questionGroup: newAnalysisQuestion.questionGroup || null,
-        groupOrder: newAnalysisQuestion.groupOrder || 0
+        
       });
       setShowAnalysisQuestionForm(false);
       setNewAnalysisQuestion({
@@ -438,8 +443,7 @@ const DirectorEditQuestions = () => {
         options: [],
         blastResultsCount: 5,
         blastTitle: '',
-        questionGroup: '',
-        groupOrder: 0
+        questionGroup: ''
       });
     }
   };
@@ -484,6 +488,128 @@ const DirectorEditQuestions = () => {
     }));
   };
 
+  // Drag and drop handlers
+  const handleDragStart = (e, question) => {
+    setDraggedQuestion(question);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, question) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedQuestion && draggedQuestion.id !== question.id && draggedQuestion.step === question.step) {
+      setDragOverQuestion(question);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverQuestion(null);
+  };
+
+  const handleDrop = async (e, targetQuestion) => {
+    e.preventDefault();
+    
+    if (!draggedQuestion || draggedQuestion.id === targetQuestion.id || draggedQuestion.step !== targetQuestion.step) {
+      setDraggedQuestion(null);
+      setDragOverQuestion(null);
+      return;
+    }
+
+    // Check if dragging to a different group
+    const draggedGroup = draggedQuestion.questionGroup || 'Ungrouped';
+    const targetGroup = targetQuestion.questionGroup || 'Ungrouped';
+    const isDifferentGroup = draggedGroup !== targetGroup;
+
+    // Get all questions in this step, sorted by order
+    const stepQuestions = analysisQuestions
+      .filter(q => q.step === draggedQuestion.step)
+      .sort((a, b) => a.order - b.order);
+
+    // Find indices
+    const draggedIndex = stepQuestions.findIndex(q => q.id === draggedQuestion.id);
+    const targetIndex = stepQuestions.findIndex(q => q.id === targetQuestion.id);
+
+    // Reorder the questions
+    const reordered = [...stepQuestions];
+    const [removed] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, removed);
+
+    // Update order values - preserve all question data
+    const updates = reordered.map((q, index) => {
+      const update = {
+        ...q,  // Keep all existing question data
+        order: index + 1  // Just update the order
+      };
+      
+      // If dragging to a different group, update the questionGroup and groupOrder
+      if (isDifferentGroup && q.id === draggedQuestion.id) {
+        update.questionGroup = targetQuestion.questionGroup || '';
+        update.groupOrder = targetQuestion.groupOrder || 999;
+      }
+      
+      return update;
+    });
+
+    try {
+      // Update all affected questions with complete data to preserve conditionalLogic and other fields
+      await Promise.all(
+        updates.map(update =>
+          apiService.put(`/analysis-questions/${update.id}`, update)
+        )
+      );
+
+      // Refresh the questions list
+      await fetchAnalysisQuestions();
+    } catch (error) {
+      console.error('Error reordering questions:', error);
+    }
+
+    setDraggedQuestion(null);
+    setDragOverQuestion(null);
+  };
+
+  // Group management functions
+  const getGroupsForStep = (step) => {
+    const stepQuestions = analysisQuestions.filter(q => q.step === step);
+    const groupsMap = new Map();
+    
+    stepQuestions.forEach(q => {
+      const groupName = q.questionGroup || 'Ungrouped';
+      if (!groupsMap.has(groupName)) {
+        groupsMap.set(groupName, {
+          name: groupName,
+          order: q.groupOrder || 999, // Default high number for groups without order
+          questionCount: 0
+        });
+      }
+      groupsMap.get(groupName).questionCount++;
+    });
+    
+    return Array.from(groupsMap.values()).sort((a, b) => a.order - b.order);
+  };
+
+  const updateGroupOrder = async (step, groupName, newOrder) => {
+    try {
+      // Find all questions in this group
+      const questionsToUpdate = analysisQuestions.filter(
+        q => q.step === step && (q.questionGroup || 'Ungrouped') === groupName
+      );
+
+      // Update groupOrder for all questions in this group
+      await Promise.all(
+        questionsToUpdate.map(q =>
+          apiService.put(`/analysis-questions/${q.id}`, { groupOrder: newOrder })
+        )
+      );
+
+      // Refresh questions list
+      await fetchAnalysisQuestions();
+    } catch (error) {
+      console.error('Error updating group order:', error);
+      alert('Failed to update group order');
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-sm border">
@@ -514,80 +640,58 @@ const DirectorEditQuestions = () => {
             {/* Add Question Form */}
             {showAnalysisQuestionForm && (
               <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-6 mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-indigo-900">
-                    {editingAnalysisQuestion ? 'Edit Analysis Question' : 'Add New Analysis Question'}
-                  </h4>
-                  <div className="flex items-center space-x-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Step</label>
-                        <select
-                          value={newAnalysisQuestion.step}
-                          onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, step: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                          <option value="clone-editing">Clone Editing</option>
-                          <option value="blast">BLAST Analysis</option>
-                          <option value="analysis-submission">Analysis Submission</option>
-                          <option value="review">Review</option>
-                        </select>
-                      </div>
+                <h4 className="text-lg font-semibold text-indigo-900 mb-4">
+                  {editingAnalysisQuestion ? 'Edit Analysis Question' : 'Add New Analysis Question'}
+                </h4>
 
-                      {/* NEW: Question Group */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Question Group (optional)
-                        </label>
-                        <input
-                          type="text"
-                          value={newAnalysisQuestion.questionGroup}
-                          onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, questionGroup: e.target.value }))}
-                          placeholder="e.g., Quality Assessment, Results Analysis"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Leave blank for ungrouped questions
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Question Order</label>
-                        <input
-                          type="number"
-                          value={newAnalysisQuestion.order}
-                          onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, order: parseInt(e.target.value) }))}
-                          min="1"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-
-                      {/* NEW: Group Order */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Group Order
-                        </label>
-                        <input
-                          type="number"
-                          value={newAnalysisQuestion.groupOrder}
-                          onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, groupOrder: parseInt(e.target.value) }))}
-                          min="0"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Controls the order of groups within each step
-                        </p>
-                      </div>
-                    </div>
-
-
-
-                    <div className="flex items-center">
-                      <label htmlFor="type-analysis" className="text-sm font-medium text-gray-700 mr-2">Type:</label>
+                {/* Top row: Step, Group, Order, Type, Required */}
+                <div className="mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {/* Step */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Step</label>
                       <select
-                        id="type-analysis"
+                        value={newAnalysisQuestion.step}
+                        onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, step: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="clone-editing">Clone Editing</option>
+                        <option value="blast">BLAST Analysis</option>
+                        <option value="analysis-submission">Analysis Submission</option>
+                        <option value="review">Review</option>
+                      </select>
+                    </div>
+
+                    {/* Question Group */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Question Group
+                      </label>
+                      <input
+                        type="text"
+                        value={newAnalysisQuestion.questionGroup}
+                        onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, questionGroup: e.target.value }))}
+                        placeholder="e.g., Quality Assessment"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+
+                    {/* Order */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Order</label>
+                      <input
+                        type="number"
+                        value={newAnalysisQuestion.order}
+                        onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, order: parseInt(e.target.value) }))}
+                        min="1"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+
+                    {/* Type */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                      <select
                         value={newAnalysisQuestion.type}
                         onChange={(e) => {
                           const newType = e.target.value;
@@ -596,7 +700,8 @@ const DirectorEditQuestions = () => {
                             type: newType,
                             options: newType === 'blast_comparison' ? {} : []
                           });
-                        }} className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       >
                         <option value="yes_no">Yes/No - Binary choice question</option>
                         <option value="text">Text - Short text answer</option>
@@ -612,31 +717,24 @@ const DirectorEditQuestions = () => {
                       </select>
                     </div>
 
+                    {/* Required */}
                     <div className="flex items-center">
-                      <label htmlFor="order-analysis" className="text-sm font-medium text-gray-700 mr-2">Order:</label>
-                      <input
-                        type="number"
-                        id="order-analysis"
-                        min="1"
-                        value={newAnalysisQuestion.order}
-                        onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, order: parseInt(e.target.value) || 1 })}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="required-analysis"
-                        checked={newAnalysisQuestion.required}
-                        onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, required: e.target.checked })}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="required-analysis" className="ml-2 block text-sm text-gray-900">
-                        Required question
+                      <label className="flex items-center cursor-pointer pt-7">
+                        <input
+                          type="checkbox"
+                          checked={newAnalysisQuestion.required}
+                          onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, required: e.target.checked })}
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <span className="ml-2 text-sm font-medium text-gray-700">Required</span>
                       </label>
                     </div>
                   </div>
+                  
+                  {/* Helper text for Question Group */}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Leave blank for ungrouped questions. Use "Manage Groups" to set group display order.
+                  </p>
                 </div>
 
                 <div className="space-y-4">
@@ -830,7 +928,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.blastQuestion1Id && newAnalysisQuestion.options?.blastQuestion2Id && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          âœ“ Comparison will show results from these two BLAST questions side by side
+                          Ã¢Å“â€œ Comparison will show results from these two BLAST questions side by side
                         </div>
                       )}
                     </div>
@@ -869,7 +967,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.sourceQuestionId && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          âœ“ Will display sequence from the selected question for highlighting
+                          Ã¢Å“â€œ Will display sequence from the selected question for highlighting
                         </div>
                       )}
                     </div>
@@ -994,20 +1092,37 @@ const DirectorEditQuestions = () => {
               const stepQuestions = analysisQuestions.filter(q => q.step === step);
               const groupedQuestions = stepQuestions.reduce((groups, question) => {
                 const group = question.questionGroup || 'Ungrouped';
-                if (!groups[group]) groups[group] = [];
-                groups[group].push(question);
+                if (!groups[group]) {
+                  groups[group] = {
+                    questions: [],
+                    order: question.groupOrder || 999 // Use groupOrder from any question in the group
+                  };
+                }
+                groups[group].questions.push(question);
                 return groups;
               }, {});
 
+              // Sort groups by their order
+              const sortedGroups = Object.entries(groupedQuestions).sort((a, b) => a[1].order - b[1].order);
+
               return (
                 <div key={step} className="border border-gray-200 rounded-lg">
-                  <div className="p-4 bg-gray-50 border-b border-gray-200">
+                  <div className="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                     <h4 className="font-medium text-gray-900 capitalize">
                       {step.replace('-', ' ')} Questions
                     </h4>
+                    {stepQuestions.length > 0 && (
+                      <button
+                        onClick={() => setManagingGroupsForStep(step)}
+                        className="text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg transition duration-200 flex items-center gap-2"
+                      >
+                        <GripVertical className="w-4 h-4" />
+                        Manage Groups
+                      </button>
+                    )}
                   </div>
                   <div className="p-4">
-                    {Object.entries(groupedQuestions).map(([groupName, questions]) => (
+                    {sortedGroups.map(([groupName, groupData]) => (
                       <div key={groupName} className="mb-6 last:mb-0">
                         <h5 className="text-lg font-bold text-indigo-800 mb-4 flex items-center">
                           {groupName !== 'Ungrouped' && (
@@ -1016,13 +1131,32 @@ const DirectorEditQuestions = () => {
                             </span>
                           )}
                           {groupName}
+                          {groupName !== 'Ungrouped' && (
+                            <span className="ml-2 text-xs text-gray-500 font-normal">
+                              (Order: {groupData.order})
+                            </span>
+                          )}
                         </h5>
                         <div className="space-y-3 pl-8 border-l-8 border-indigo-200">
-                          {questions
+                          {groupData.questions
                             .sort((a, b) => a.order - b.order)
                             .map(question => (
                               <div key={question.id}>
-                                <div className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded">
+                                <div 
+                                  draggable="true"
+                                  onDragStart={(e) => handleDragStart(e, question)}
+                                  onDragOver={(e) => handleDragOver(e, question)}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => handleDrop(e, question)}
+                                  className={`flex items-center p-3 bg-white border-2 rounded transition-all ${
+                                    dragOverQuestion?.id === question.id 
+                                      ? 'border-indigo-500 bg-indigo-50 scale-105' 
+                                      : 'border-gray-200'
+                                  } ${draggedQuestion?.id === question.id ? 'opacity-50' : ''}`}
+                                >
+                                  <div className="mr-3 cursor-grab active:cursor-grabbing">
+                                    <GripVertical className="w-5 h-5 text-gray-400" />
+                                  </div>
                                   <div className="flex-1">
                                     <div className="font-medium text-gray-900" dangerouslySetInnerHTML={{ __html: question.text }} />
                                     <div className="flex items-center space-x-2 mt-1">
@@ -1034,9 +1168,6 @@ const DirectorEditQuestions = () => {
                                         </span>
                                       )}
                                       <span className="text-xs text-gray-500">Order: {question.order}</span>
-                                      {question.questionGroup && (
-                                        <span className="text-xs text-gray-500">Group Order: {question.groupOrder}</span>
-                                      )}
                                     </div>
                                   </div>
                                   <div className="flex space-x-2 ml-4">
@@ -1087,7 +1218,14 @@ const DirectorEditQuestions = () => {
                                           <label className="block text-sm font-medium text-gray-700 mb-2">Question Type</label>
                                           <select
                                             value={newAnalysisQuestion.type}
-                                            onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, type: e.target.value })}
+                                            onChange={(e) => {
+                                              const newType = e.target.value;
+                                              setNewAnalysisQuestion({
+                                                ...newAnalysisQuestion,
+                                                type: newType,
+                                                options: newType === 'blast_comparison' ? {} : []
+                                              });
+                                            }}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                                           >
                                             <option value="yes_no">Yes/No - Binary choice question</option>
@@ -1103,7 +1241,26 @@ const DirectorEditQuestions = () => {
                                             <option value="sequence_display">Sequence Display - Display sequence from another question</option>
                                           </select>
                                         </div>
+                                      </div>
 
+                                      {/* Question Group */}
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Question Group (optional)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={newAnalysisQuestion.questionGroup}
+                                          onChange={(e) => setNewAnalysisQuestion(prev => ({ ...prev, questionGroup: e.target.value }))}
+                                          placeholder="e.g., Quality Assessment, Results Analysis"
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                          Leave blank for ungrouped questions. Use "Manage Groups" to set display order.
+                                        </p>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-4">
                                         <div>
                                           <label className="block text-sm font-medium text-gray-700 mb-2">Order</label>
                                           <input
@@ -1127,6 +1284,270 @@ const DirectorEditQuestions = () => {
                                         </div>
                                       </div>
 
+                                      {/* Type-Specific Options */}
+                                      {newAnalysisQuestion.type === 'blast' && (
+                                        <div className="space-y-3 border-t pt-3">
+                                          <h6 className="text-sm font-medium text-gray-700">BLAST Configuration</h6>
+                                          <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">BLAST Table Title</label>
+                                            <input
+                                              type="text"
+                                              value={newAnalysisQuestion.blastTitle}
+                                              onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, blastTitle: e.target.value })}
+                                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                              placeholder="e.g., Top BLAST Results"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Number of Results</label>
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              max="20"
+                                              value={newAnalysisQuestion.blastResultsCount}
+                                              onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, blastResultsCount: parseInt(e.target.value) || 3 })}
+                                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                            />
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {newAnalysisQuestion.type === 'sequence_range' && (
+                                        <div className="space-y-3 border-t pt-3">
+                                          <h6 className="text-sm font-medium text-gray-700">Sequence Range Configuration</h6>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                              <label className="block text-xs font-medium text-gray-600 mb-1">First Field Label</label>
+                                              <input
+                                                type="text"
+                                                value={newAnalysisQuestion.options?.label1 || ''}
+                                                onChange={(e) => setNewAnalysisQuestion({
+                                                  ...newAnalysisQuestion,
+                                                  options: {
+                                                    ...newAnalysisQuestion.options,
+                                                    label1: e.target.value
+                                                  }
+                                                })}
+                                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder="e.g., Start Position"
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-xs font-medium text-gray-600 mb-1">Second Field Label</label>
+                                              <input
+                                                type="text"
+                                                value={newAnalysisQuestion.options?.label2 || ''}
+                                                onChange={(e) => setNewAnalysisQuestion({
+                                                  ...newAnalysisQuestion,
+                                                  options: {
+                                                    ...newAnalysisQuestion.options,
+                                                    label2: e.target.value
+                                                  }
+                                                })}
+                                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder="e.g., End Position"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {newAnalysisQuestion.type === 'select' && (
+                                        <div className="space-y-2 border-t pt-3">
+                                          <div className="flex items-center justify-between">
+                                            <h6 className="text-sm font-medium text-gray-700">Answer Options</h6>
+                                            <button
+                                              type="button"
+                                              onClick={addOption}
+                                              className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded"
+                                            >
+                                              + Add Option
+                                            </button>
+                                          </div>
+                                          {newAnalysisQuestion.options.map((option, index) => (
+                                            <div key={index} className="flex items-center space-x-2">
+                                              <input
+                                                type="text"
+                                                value={option}
+                                                onChange={(e) => updateOption(index, e.target.value)}
+                                                className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder={`Option ${index + 1}`}
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() => removeOption(index)}
+                                                className="text-red-600 hover:text-red-800 p-1"
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {newAnalysisQuestion.type === 'blast_comparison' && (
+                                        <div className="space-y-3 border-t pt-3">
+                                          <h6 className="text-sm font-medium text-gray-700">BLAST Comparison Configuration</h6>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                              <label className="block text-xs font-medium text-gray-600 mb-1">First BLAST Question</label>
+                                              <select
+                                                value={newAnalysisQuestion.options?.blastQuestion1Id || ''}
+                                                onChange={(e) => setNewAnalysisQuestion({
+                                                  ...newAnalysisQuestion,
+                                                  options: {
+                                                    ...newAnalysisQuestion.options,
+                                                    blastQuestion1Id: e.target.value || null
+                                                  }
+                                                })}
+                                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                              >
+                                                <option value="">Select a BLAST question...</option>
+                                                {analysisQuestions
+                                                  .filter(q => q.type === 'blast' && q.id !== editingAnalysisQuestion)
+                                                  .map(q => (
+                                                    <option key={q.id} value={q.id}>
+                                                      {q.text.length > 40 ? `${q.text.substring(0, 40)}...` : q.text}
+                                                    </option>
+                                                  ))}
+                                              </select>
+                                            </div>
+                                            <div>
+                                              <label className="block text-xs font-medium text-gray-600 mb-1">Second BLAST Question</label>
+                                              <select
+                                                value={newAnalysisQuestion.options?.blastQuestion2Id || ''}
+                                                onChange={(e) => setNewAnalysisQuestion({
+                                                  ...newAnalysisQuestion,
+                                                  options: {
+                                                    ...newAnalysisQuestion.options,
+                                                    blastQuestion2Id: e.target.value || null
+                                                  }
+                                                })}
+                                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                              >
+                                                <option value="">Select a BLAST question...</option>
+                                                {analysisQuestions
+                                                  .filter(q => q.type === 'blast' && q.id !== newAnalysisQuestion.options?.blastQuestion1Id && q.id !== editingAnalysisQuestion)
+                                                  .map(q => (
+                                                    <option key={q.id} value={q.id}>
+                                                      {q.text.length > 40 ? `${q.text.substring(0, 40)}...` : q.text}
+                                                    </option>
+                                                  ))}
+                                              </select>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {newAnalysisQuestion.type === 'sequence_display' && (
+                                        <div className="space-y-3 border-t pt-3">
+                                          <h6 className="text-sm font-medium text-gray-700">Sequence Display Configuration</h6>
+                                          <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">Source Sequence Question</label>
+                                            <select
+                                              value={newAnalysisQuestion.options?.sourceQuestionId || ''}
+                                              onChange={(e) => setNewAnalysisQuestion({
+                                                ...newAnalysisQuestion,
+                                                options: {
+                                                  ...newAnalysisQuestion.options,
+                                                  sourceQuestionId: e.target.value || null
+                                                }
+                                              })}
+                                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                            >
+                                              <option value="">Select a sequence question...</option>
+                                              {analysisQuestions
+                                                .filter(q => (q.type === 'dna_sequence' || q.type === 'protein_sequence') && q.id !== editingAnalysisQuestion)
+                                                .map(q => (
+                                                  <option key={q.id} value={q.id}>
+                                                    {q.text.length > 40 ? `${q.text.substring(0, 40)}...` : q.text}
+                                                  </option>
+                                                ))}
+                                            </select>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Conditional Logic Section */}
+                                      <div className="border-t pt-3 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-sm font-medium text-gray-700">Conditional Logic (Optional)</label>
+                                          {!newAnalysisQuestion.conditionalLogic ? (
+                                            <button
+                                              type="button"
+                                              onClick={addConditionalLogic}
+                                              className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-2 py-1 rounded"
+                                            >
+                                              + Add Condition
+                                            </button>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={removeConditionalLogic}
+                                              className="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded"
+                                            >
+                                              Remove Condition
+                                            </button>
+                                          )}
+                                        </div>
+
+                                        {newAnalysisQuestion.conditionalLogic && (
+                                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
+                                            <p className="text-xs text-yellow-700 font-medium">
+                                              This question will only show if another question has a specific answer
+                                            </p>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                              <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Depends on Question</label>
+                                                <select
+                                                  value={newAnalysisQuestion.conditionalLogic.showIf.questionId}
+                                                  onChange={(e) => setNewAnalysisQuestion({
+                                                    ...newAnalysisQuestion,
+                                                    conditionalLogic: {
+                                                      ...newAnalysisQuestion.conditionalLogic,
+                                                      showIf: {
+                                                        ...newAnalysisQuestion.conditionalLogic.showIf,
+                                                        questionId: e.target.value
+                                                      }
+                                                    }
+                                                  })}
+                                                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                >
+                                                  <option value="">Select a question...</option>
+                                                  {analysisQuestions
+                                                    .filter(q => q.id !== editingAnalysisQuestion)
+                                                    .map(q => (
+                                                      <option key={q.id} value={q.id}>
+                                                        {q.text.substring(0, 40)}{q.text.length > 40 ? '...' : ''}
+                                                      </option>
+                                                    ))}
+                                                </select>
+                                              </div>
+                                              <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">When Answer Is</label>
+                                                <input
+                                                  type="text"
+                                                  value={newAnalysisQuestion.conditionalLogic.showIf.answer}
+                                                  onChange={(e) => setNewAnalysisQuestion({
+                                                    ...newAnalysisQuestion,
+                                                    conditionalLogic: {
+                                                      ...newAnalysisQuestion.conditionalLogic,
+                                                      showIf: {
+                                                        ...newAnalysisQuestion.conditionalLogic.showIf,
+                                                        answer: e.target.value
+                                                      }
+                                                    }
+                                                  })}
+                                                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                  placeholder="e.g., yes, no"
+                                                />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+
                                       <div className="flex justify-end space-x-2 pt-3 border-t border-indigo-200">
                                         <button
                                           onClick={() => {
@@ -1141,8 +1562,7 @@ const DirectorEditQuestions = () => {
                                               options: [],
                                               blastResultsCount: 3,
                                               blastTitle: '',
-                                              questionGroup: '',
-                                              groupOrder: 0
+                                              questionGroup: ''
                                             });
                                           }}
                                           className="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50"
@@ -1172,6 +1592,83 @@ const DirectorEditQuestions = () => {
           </div>
         </div>
       </div>
+
+      {/* Group Management Modal */}
+      {managingGroupsForStep && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Manage Groups - {managingGroupsForStep.replace('-', ' ').charAt(0).toUpperCase() + managingGroupsForStep.replace('-', ' ').slice(1)}
+                </h3>
+                <button
+                  onClick={() => setManagingGroupsForStep(null)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                Set the display order for each group. Lower numbers appear first.
+              </p>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-4">
+                {getGroupsForStep(managingGroupsForStep).map((group) => (
+                  <div key={group.name} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          {group.name !== 'Ungrouped' && (
+                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                              Group
+                            </span>
+                          )}
+                          <h4 className="font-semibold text-gray-900">{group.name}</h4>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {group.questionCount} question{group.questionCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm font-medium text-gray-700">Order:</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={group.order === 999 ? '' : group.order}
+                          onChange={(e) => {
+                            const newOrder = parseInt(e.target.value) || 999;
+                            updateGroupOrder(managingGroupsForStep, group.name, newOrder);
+                          }}
+                          placeholder="999"
+                          className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-center"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {getGroupsForStep(managingGroupsForStep).length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No groups in this step yet. Add questions with group names to create groups.
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setManagingGroupsForStep(null)}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
