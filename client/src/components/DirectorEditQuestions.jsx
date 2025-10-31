@@ -239,6 +239,7 @@ const DirectorEditQuestions = () => {
   // Drag and drop state
   const [draggedQuestion, setDraggedQuestion] = useState(null);
   const [dragOverQuestion, setDragOverQuestion] = useState(null);
+  const [dropPosition, setDropPosition] = useState(null); // 'before' or 'after'
 
   // Group management state
   const [managingGroupsForStep, setManagingGroupsForStep] = useState(null);
@@ -498,12 +499,19 @@ const DirectorEditQuestions = () => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (draggedQuestion && draggedQuestion.id !== question.id && draggedQuestion.step === question.step) {
+      // Calculate if hovering over top or bottom half
+      const rect = e.currentTarget.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const position = e.clientY < midpoint ? 'before' : 'after';
+      
       setDragOverQuestion(question);
+      setDropPosition(position);
     }
   };
 
   const handleDragLeave = () => {
     setDragOverQuestion(null);
+    setDropPosition(null);
   };
 
   const handleDrop = async (e, targetQuestion) => {
@@ -512,6 +520,7 @@ const DirectorEditQuestions = () => {
     if (!draggedQuestion || draggedQuestion.id === targetQuestion.id || draggedQuestion.step !== targetQuestion.step) {
       setDraggedQuestion(null);
       setDragOverQuestion(null);
+      setDropPosition(null);
       return;
     }
 
@@ -527,7 +536,18 @@ const DirectorEditQuestions = () => {
 
     // Find indices
     const draggedIndex = stepQuestions.findIndex(q => q.id === draggedQuestion.id);
-    const targetIndex = stepQuestions.findIndex(q => q.id === targetQuestion.id);
+    let targetIndex = stepQuestions.findIndex(q => q.id === targetQuestion.id);
+    
+    // Adjust target index based on drop position
+    // If dropping 'after', increment the target index
+    if (dropPosition === 'after') {
+      targetIndex++;
+    }
+    
+    // If dragging from before to after the same position, adjust
+    if (draggedIndex < targetIndex) {
+      targetIndex--;
+    }
 
     // Reorder the questions
     const reordered = [...stepQuestions];
@@ -566,6 +586,7 @@ const DirectorEditQuestions = () => {
 
     setDraggedQuestion(null);
     setDragOverQuestion(null);
+    setDropPosition(null);
   };
 
   // Group management functions
@@ -1141,7 +1162,14 @@ const DirectorEditQuestions = () => {
                           {groupData.questions
                             .sort((a, b) => a.order - b.order)
                             .map(question => (
-                              <div key={question.id}>
+                              <div key={question.id} className="relative">
+                                {/* Drop indicator line - shows before */}
+                                {dragOverQuestion?.id === question.id && dropPosition === 'before' && (
+                                  <div className="absolute -top-1.5 left-0 right-0 h-1 bg-indigo-500 rounded-full z-10 shadow-lg">
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-indigo-500 rounded-full"></div>
+                                  </div>
+                                )}
+                                
                                 <div 
                                   draggable="true"
                                   onDragStart={(e) => handleDragStart(e, question)}
@@ -1150,7 +1178,7 @@ const DirectorEditQuestions = () => {
                                   onDrop={(e) => handleDrop(e, question)}
                                   className={`flex items-center p-3 bg-white border-2 rounded transition-all ${
                                     dragOverQuestion?.id === question.id 
-                                      ? 'border-indigo-500 bg-indigo-50 scale-105' 
+                                      ? 'border-indigo-300' 
                                       : 'border-gray-200'
                                   } ${draggedQuestion?.id === question.id ? 'opacity-50' : ''}`}
                                 >
@@ -1578,6 +1606,13 @@ const DirectorEditQuestions = () => {
                                         </button>
                                       </div>
                                     </div>
+                                  </div>
+                                )}
+                                
+                                {/* Drop indicator line - shows after */}
+                                {dragOverQuestion?.id === question.id && dropPosition === 'after' && (
+                                  <div className="absolute -bottom-1.5 left-0 right-0 h-1 bg-indigo-500 rounded-full z-10 shadow-lg">
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-indigo-500 rounded-full"></div>
                                   </div>
                                 )}
                               </div>
