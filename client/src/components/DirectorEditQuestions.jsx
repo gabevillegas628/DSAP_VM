@@ -114,7 +114,7 @@ const RichTextEditor = ({ value, onChange }) => {
           className="p-2 hover:bg-gray-200 rounded transition"
           title="Bullet List (Tab to indent)"
         >
-          <List className="w-4 h-4" />
+          <List className="w-6 h-6" />
         </button>
         <button
           type="button"
@@ -122,7 +122,7 @@ const RichTextEditor = ({ value, onChange }) => {
           className="p-2 hover:bg-gray-200 rounded transition"
           title="Numbered List (Tab to indent)"
         >
-          <ListOrdered className="w-4 h-4" />
+          <ListOrdered className="w-6 h-6" />
         </button>
         <button
           type="button"
@@ -147,7 +147,7 @@ const RichTextEditor = ({ value, onChange }) => {
         contentEditable
         onInput={handleInput}
         onKeyDown={handleKeyDown}
-        className="p-3 min-h-[100px] bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="p-3 min-h-[200px] bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
         style={{ wordBreak: 'break-word' }}
         suppressContentEditableWarning={true}
       />
@@ -598,17 +598,17 @@ const DirectorEditQuestions = () => {
                           });
                         }} className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       >
-                        <option value="yes_no">Yes/No</option>
-                        <option value="text">Text</option>
-                        <option value="sequence_range">Sequence Range</option>
-                        <option value="textarea">Long Text</option>
-                        <option value="dna_sequence">DNA Sequence</option>
-                        <option value="protein_sequence">Protein Sequence</option>
-                        <option value="number">Number</option>
-                        <option value="select">Multiple Choice</option>
-                        <option value="blast">BLAST Results</option>
-                        <option value="blast_comparison">BLAST Table Comparison</option>
-                        <option value="sequence_display">Sequence Display</option>
+                        <option value="yes_no">Yes/No - Binary choice question</option>
+                        <option value="text">Text - Short text answer</option>
+                        <option value="sequence_range">Sequence Range - Select a range in a sequence</option>
+                        <option value="textarea">Long Text - Extended text response</option>
+                        <option value="dna_sequence">DNA Sequence - DNA sequence input</option>
+                        <option value="protein_sequence">Protein Sequence - Protein sequence input</option>
+                        <option value="number">Number - Numeric answer</option>
+                        <option value="select">Multiple Choice - Select from options</option>
+                        <option value="blast">BLAST Results - Student enters BLAST search results</option>
+                        <option value="blast_comparison">BLAST Table Comparison - Compare two BLAST result tables</option>
+                        <option value="sequence_display">Sequence Display - Display sequence from another question</option>
                       </select>
                     </div>
 
@@ -1090,13 +1090,17 @@ const DirectorEditQuestions = () => {
                                             onChange={(e) => setNewAnalysisQuestion({ ...newAnalysisQuestion, type: e.target.value })}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                                           >
-                                            <option value="text">Text</option>
-                                            <option value="yes_no">Yes/No</option>
-                                            <option value="select">Select</option>
-                                            <option value="blast">BLAST</option>
-                                            <option value="blast_comparison">BLAST Comparison</option>
-                                            <option value="sequence_range">Sequence Range</option>
-                                            <option value="sequence_display">Sequence Display</option>
+                                            <option value="yes_no">Yes/No - Binary choice question</option>
+                                            <option value="text">Text - Short text answer</option>
+                                            <option value="textarea">Long Text - Extended text response</option>
+                                            <option value="dna_sequence">DNA Sequence - DNA sequence input</option>
+                                            <option value="protein_sequence">Protein Sequence - Protein sequence input</option>
+                                            <option value="number">Number - Numeric answer</option>
+                                            <option value="sequence_range">Sequence Range - Select a range in a sequence</option>
+                                            <option value="select">Multiple Choice - Select from options</option>
+                                            <option value="blast">BLAST Results - Student enters BLAST search results</option>
+                                            <option value="blast_comparison">BLAST Table Comparison - Compare two BLAST result tables</option>
+                                            <option value="sequence_display">Sequence Display - Display sequence from another question</option>
                                           </select>
                                         </div>
 
