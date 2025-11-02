@@ -585,7 +585,12 @@ const authenticateToken = (req, res, next) => {
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
+    if (err) {
+      // Return 401 for expired tokens so client can handle gracefully
+      // TokenExpiredError, JsonWebTokenError, NotBeforeError
+      const message = err.name === 'TokenExpiredError' ? 'Session expired' : 'Invalid token';
+      return res.status(401).json({ error: message });
+    }
     req.user = user;
     next();
   });
@@ -1066,7 +1071,7 @@ app.post('/api/auth/login', async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '8h' }
     );
 
     const { password: _, ...userWithoutPassword } = user;
