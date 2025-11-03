@@ -62,10 +62,10 @@ const SubmitConfirmationModal = ({ isOpen, onClose, onConfirm, cloneName, progre
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="text-sm font-medium text-blue-900 mb-2">What happens next:</h4>
             <ul className="space-y-1 text-sm text-blue-800">
-              <li>â€¢ Your analysis will be submitted to instructors</li>
-              <li>â€¢ You won't be able to edit until review is complete</li>
-              <li>â€¢ You'll receive feedback through the messaging system</li>
-              <li>â€¢ If changes are needed, editing will be re-enabled</li>
+              <li>• Your analysis will be submitted to instructors</li>
+              <li>• You won't be able to edit until review is complete</li>
+              <li>• You'll receive feedback through the messaging system</li>
+              <li>• If changes are needed, editing will be re-enabled</li>
             </ul>
           </div>
         </div>
@@ -396,71 +396,6 @@ const FeedbackMessagesPanel = ({ cloneData, currentUser, isVisible, onToggle }) 
 };
 
 // Enhanced Review Status Banner Component
-const EnhancedReviewStatusBanner = ({ status, onRefresh, onToggleFeedback, hasUnreadFeedback }) => {
-  // Use the imported function directly - no local wrapper needed
-  const config = getStatusConfig(status);
-  if (!config) return null;
-
-  // Convert string icon name to actual icon component
-  let Icon;
-  switch (config.icon) {
-    case 'Clock':
-      Icon = Clock;
-      break;
-    case 'RefreshCw':
-      Icon = RefreshCw;
-      break;
-    case 'CheckCircle':
-      Icon = CheckCircle;
-      break;
-    case 'AlertCircle':
-      Icon = AlertCircle;
-      break;
-    default:
-      Icon = AlertCircle;
-  }
-
-  return (
-    <div className={`${config.bgColor} ${config.borderColor} border rounded-lg p-4 mb-6`}>
-      <div className="flex items-start space-x-3">
-        <Icon className={`w-6 h-6 ${config.iconColor} mt-0.5`} />
-        <div className="flex-1">
-          <h4 className={`font-semibold ${config.textColor} mb-1`}>{config.title}</h4>
-          <p className={`text-sm ${config.textColor} mb-3`}>{config.message}</p>
-
-          <div className="flex items-center space-x-3">
-            {config.showRefresh && (
-              <button
-                onClick={onRefresh}
-                className={`text-sm ${config.textColor} hover:underline flex items-center space-x-1`}
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Check for updates</span>
-              </button>
-            )}
-
-            {config.showFeedbackButton && (
-              <button
-                onClick={onToggleFeedback}
-                className={`text-sm ${config.textColor} hover:underline flex items-center space-x-1 font-medium`}
-              >
-                <MessageCircle className="w-3 h-3" />
-                <span>
-                  View Instructor Feedback
-                  {hasUnreadFeedback && (
-                    <span className="ml-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                      New
-                    </span>
-                  )}
-                </span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Main DNA Analysis Interface Component
 const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedChangesUpdate, currentUser, onNavigateToMessages, onOpenHelp }) => {
@@ -1671,9 +1606,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                         comment.isCorrect === false ? 'text-red-800' :
                           'text-blue-800'
                         }`}>
-                        {comment.isCorrect === true ? 'âœ“ Correct' :
-                          comment.isCorrect === false ? 'âœ— Needs Improvement' :
-                            'â„¹ Instructor Feedback'}
+                        {comment.isCorrect === true ? 'Ã¢Å“â€œ Correct' :
+                          comment.isCorrect === false ? 'Ã¢Å“â€” Needs Improvement' :
+                            'Ã¢â€žÂ¹ Instructor Feedback'}
                       </span>
                     </div>
 
@@ -2119,20 +2054,67 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
           {/* Header */}
           <div className="p-6 border-b border-gray-200">
             <div className="flex justify-between items-start">
-              <div>
-                <div>
+              <div className="flex-1">
+                <div className="flex items-center space-x-3">
                   <h3 className="text-lg font-semibold text-gray-900">
                     Analyzing {cloneData.cloneName}
                   </h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    File: {cloneData.filename} â€¢ Progress: {getOverallProgress()}%
-                    {lastSaved && (
-                      <span className="text-green-600 ml-2">
-                        â€¢ Auto-saved at {lastSaved instanceof Date ? lastSaved.toLocaleTimeString() : 'unknown time'}
-                      </span>
-                    )}
-                  </p>
+                  {(() => {
+                    const config = getStatusConfig(currentStatus);
+                    if (!config) return null;
+                    
+                    let Icon;
+                    switch (config.icon) {
+                      case 'Clock':
+                        Icon = Clock;
+                        break;
+                      case 'RefreshCw':
+                        Icon = RefreshCw;
+                        break;
+                      case 'CheckCircle':
+                        Icon = CheckCircle;
+                        break;
+                      case 'AlertCircle':
+                        Icon = AlertCircle;
+                        break;
+                      default:
+                        Icon = AlertCircle;
+                    }
+                    
+                    return (
+                      <div className={`inline-flex items-center space-x-2 px-3 py-1.5 ${config.bgColor} ${config.borderColor} border rounded-lg`}>
+                        <Icon className={`w-4 h-4 ${config.iconColor}`} />
+                        <span className={`text-sm font-medium ${config.textColor}`}>{config.title}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Progress: {getOverallProgress()}%
+                  {lastSaved && (
+                    <span className="text-green-600 ml-2">
+                      • Auto-saved at {lastSaved instanceof Date ? lastSaved.toLocaleTimeString() : 'unknown time'}
+                    </span>
+                  )}
+                  {(() => {
+                    const config = getStatusConfig(currentStatus);
+                    if (!config) return null;
+                    return (
+                      <>
+                        <span className={`ml-2 ${config.textColor}`}>• {config.message}</span>
+                        {config.showRefresh && (
+                          <button
+                            onClick={refreshStatus}
+                            className={`ml-2 text-sm ${config.textColor} hover:underline inline-flex items-center space-x-1`}
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>Check for updates</span>
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </p>
               </div>
             </div>
           </div>
@@ -2230,7 +2212,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                       <div>
                                         <p className="text-sm font-medium">{group.name}</p>
                                         <p className={`text-xs ${isCurrentGroup ? 'text-emerald-200' : 'text-gray-500'}`}>
-                                          {group.questions.length} question{group.questions.length !== 1 ? 's' : ''} â€¢ {groupProgress}%
+                                          {group.questions.length} question{group.questions.length !== 1 ? 's' : ''} • {groupProgress}%
                                         </p>
                                       </div>
                                     </div>
@@ -2268,13 +2250,6 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
             {/* Main Content Area */}
             <div className="flex-1 p-6">
-              {/* Review Status Banner */}
-              <EnhancedReviewStatusBanner
-                status={currentStatus}
-                onRefresh={refreshStatus}
-                onToggleFeedback={() => setShowFeedbackPanel(!showFeedbackPanel)}
-                hasUnreadFeedback={hasUnreadFeedback}
-              />
 
               <FeedbackMessagesPanel
                 cloneData={cloneData}
@@ -2345,17 +2320,6 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                   </div>
                 )}
 
-                {/* Helpful tip for chromatogram */}
-                {!showChromatogram && canEdit() && (
-                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center space-x-2">
-                      <BarChart3 className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm text-blue-800">
-                        <strong>Tip:</strong> Click "View Chromatogram" above to load and visualize your {cloneData.type === 'assigned' ? '.ab1' : 'practice'} sequence data while answering questions.
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Questions Section - UPDATED to work with group filtering */}

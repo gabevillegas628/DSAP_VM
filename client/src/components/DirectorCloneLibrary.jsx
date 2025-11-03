@@ -77,7 +77,7 @@ const DirectorCloneLibrary = () => {
 
 
     } catch (error) {
-      alert(`Error checking for missing files: ${error.message}`);
+      console.log(`Error checking for missing files: ${error.message}`);
     } finally {
       setLoadingMissingFiles(false);
     }

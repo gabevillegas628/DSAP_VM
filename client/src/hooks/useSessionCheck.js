@@ -25,7 +25,7 @@ export const useSessionCheck = (onSessionExpired) => {
         
         if (Date.now() >= expirationTime) {
           // Token has expired
-          console.log('Token expired, triggering session expiration');
+          //console.log('Token expired, triggering session expiration');
           setIsSessionValid(false);
           if (onSessionExpired) {
             onSessionExpired();

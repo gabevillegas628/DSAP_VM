@@ -12,12 +12,10 @@ import InstructorDashboard from './components/InstructorDashboard';
 import StudentDashboard from './components/StudentDashboard';
 import StudentHelp from './components/StudentHelp';
 import ResetPasswordPage from './components/ResetPasswordPage';
-
-// ========== NEW IMPORTS - ADDED FOR SESSION HANDLING ==========
+// Session handling imports
 import { useSessionCheck } from './hooks/useSessionCheck';
 import SessionExpiredModal from './components/SessionExpiredModal';
 import apiService from './services/apiService';
-// ===============================================================
 
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(false);
@@ -39,10 +37,7 @@ const App = () => {
   const isMobile = useIsMobile();
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // ========== NEW STATE - ADDED FOR SESSION HANDLING ==========
   const [showSessionExpiredModal, setShowSessionExpiredModal] = useState(false);
-  // ============================================================
 
   // Sample data - in a real app, this would come from an API
   const [schools, setSchools] = useState([]);
@@ -52,13 +47,11 @@ const App = () => {
     { id: 2, from: 'Maria Garcia', school: 'Roosevelt Academy', instructor: 'Prof. Michael Chen', assignedFile: 'sample_002.ab1', progress: 2, content: 'The chromatogram quality seems poor in my sample', timestamp: '2024-01-16T14:20:00Z', replied: true }
   ]);
 
-  // ========== NEW HOOK - ADDED FOR SESSION HANDLING ==========
   // Monitor session and show modal when token expires
   useSessionCheck(() => {
     console.log('Session expired detected in App.jsx');
     setShowSessionExpiredModal(true);
   });
-  // ===========================================================
 
   // Check for existing authentication on app load
   useEffect(() => {
@@ -95,7 +88,7 @@ const App = () => {
     localStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
-  // ========== NEW HANDLER - ADDED FOR SESSION HANDLING ==========
+  // session expiration handler
   const handleSessionExpiredClose = () => {
     // Clear all authentication data
     setCurrentUser(null);
@@ -106,7 +99,6 @@ const App = () => {
     // Force redirect to login page
     window.location.href = '/';
   };
-  // ==============================================================
 
   const contextValue = {
     currentUser,
@@ -166,11 +158,10 @@ const App = () => {
               } />
             </Routes>
 
-            {/* ========== NEW MODAL - ADDED FOR SESSION HANDLING ========== */}
+            {/* Session Expired Modal */}
             {showSessionExpiredModal && (
               <SessionExpiredModal onClose={handleSessionExpiredClose} />
             )}
-            {/* ============================================================ */}
 
           </TitleManager>
         </ProgramSettingsProvider>
