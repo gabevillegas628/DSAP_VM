@@ -429,6 +429,10 @@ const LoginScreen = ({ onLogin }) => {
                     {/* Background Pattern */}
                     <div className="absolute inset-0">
                         <div className="absolute inset-0 bg-gradient-to-br from-blue-800 via-blue-900 to-blue-800"></div>
+                        {/* Subtle white fade in bottom-right corner for logo - radial for organic shape */}
+                        <div className="absolute bottom-0 right-0 w-full h-full pointer-events-none" style={{
+                            background: 'radial-gradient(ellipse 800px 500px at bottom right, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.15) 20%, rgba(255,255,255,0.05) 40%, transparent 70%)'
+                        }}></div>
                         <svg className="absolute bottom-0 left-0 w-full h-64" viewBox="0 0 1200 320" preserveAspectRatio="none">
                             <path d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,149.3C960,160,1056,160,1152,149.3L1200,139L1200,320L1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z" fill="rgba(59, 130, 246, 0.1)"></path>
                         </svg>
@@ -928,7 +932,7 @@ const LoginScreen = ({ onLogin }) => {
                     <img
                         src={waksmanLogo}
                         alt="Waksman Institute"
-                        className="h-20 w-auto opacity-60"
+                        className="h-20 w-auto"
                     />
                 </div>
             </div>

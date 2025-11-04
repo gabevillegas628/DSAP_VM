@@ -12,7 +12,6 @@ import {
   School,
   Clock,
   AlertTriangle,
-  AlertCircle,
   Save,
   Send,
   Star,
@@ -24,7 +23,7 @@ import {
 } from 'lucide-react';
 
 import { CheckCircle2 } from 'lucide-react';
-import ChromatogramViewer from './ChromatogramViewer';
+import DraggableChromogramModal from './DraggableChromogramModal';
 import SequenceAlignmentModal from './SequenceAlignmentModal.jsx';
 import { useDNAContext } from '../context/DNAContext';
 import apiService from '../services/apiService';
@@ -147,6 +146,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [statusChangeLoading, setStatusChangeLoading] = useState(false);
   const [showNCBIDropdown, setShowNCBIDropdown] = useState(false);
+  const [expandedDirectorNotes, setExpandedDirectorNotes] = useState(new Set()); // Track which director reference boxes are expanded
   const { currentUser } = useDNAContext();
 
 
@@ -1102,6 +1102,15 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
     // Reset expanded sections - start with all closed
     setExpandedSections(new Set());
 
+    // Auto-expand director notes that have content
+    const questionsWithNotes = new Set();
+    (submission.reviewComments || []).forEach(comment => {
+      if (comment.correctAnswer && comment.correctAnswer.trim() !== '') {
+        questionsWithNotes.add(comment.questionId);
+      }
+    });
+    setExpandedDirectorNotes(questionsWithNotes);
+
     // If this is a practice clone, fetch the correct answers
     if (submission.type === 'practice') {
       console.log('Loading practice answers for submission:', submission);
@@ -1599,10 +1608,32 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
     return sectionsWithAnswers;
   };
 
+  // Helper function to determine if a question should be shown based on conditional logic
+  const shouldShowQuestion = (question, answers) => {
+    if (!question.conditionalLogic) return true;
+
+    const { showIf } = question.conditionalLogic;
+    const dependentAnswer = answers[showIf.questionId];
+
+    // First check if the answer matches
+    if (dependentAnswer !== showIf.answer) {
+      return false;
+    }
+
+    // Then recursively check if the dependent question is itself visible
+    // This handles cascading conditional logic (Q1 → Q2 → Q3)
+    const dependentQuestion = analysisQuestions.find(q => q.id === showIf.questionId);
+    if (dependentQuestion) {
+      return shouldShowQuestion(dependentQuestion, answers);
+    }
+
+    return true;
+  };
+
   const getQuestionsForSection = (sectionId, answers) => {
     return analysisQuestions
       .filter(q => q.step === sectionId)
-      .filter(q => answers[q.id] !== undefined && answers[q.id] !== '')
+      .filter(q => shouldShowQuestion(q, answers))
       .sort((a, b) => {
         // First sort by groupOrder (treating null/undefined as 0)
         const aGroupOrder = a.groupOrder || 0;
@@ -1619,15 +1650,27 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
   // Helper function to get question status for the new layout
   const getQuestionStatus = (question, submission) => {
-    const correctComment = reviewData.comments?.find(c =>
-      c.questionId === question.id && c.comment === 'Correct!'
-    );
-    if (correctComment) return 'correct';
+    // Check if question has been answered
+    const answer = submission.answers[question.id];
+    const isAnswered = answer !== undefined && answer !== '';
 
-    const hasComment = reviewData.comments?.find(c => c.questionId === question.id);
-    if (hasComment && hasComment.comment !== 'Correct!') return 'incorrect';
+    // Get comment data to check grading status
+    const commentData = getQuestionCommentData(question.id);
 
-    return 'pending';
+    // If not answered, return unanswered
+    if (!isAnswered) {
+      return 'unanswered';
+    }
+
+    // Check grading status from isCorrect property
+    if (commentData.isCorrect === true) {
+      return 'correct';
+    } else if (commentData.isCorrect === false) {
+      return 'incorrect';
+    }
+
+    // Answered but not yet graded
+    return 'not_graded';
   };
 
   // Helper function to check if question is marked correct (for button styling)
@@ -2182,17 +2225,50 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                               </span>
                             </div>
                             {/* Status indicator */}
-                            <div className={`w-4 h-4 rounded-full ${questionsInSection.every(q => getQuestionStatus(q, selectedSubmission) === 'correct')
-                              ? 'bg-green-500'
-                              : questionsInSection.some(q => getQuestionStatus(q, selectedSubmission) === 'incorrect')
-                                ? 'bg-red-500'
-                                : 'bg-yellow-500'
-                              }`}>
+                            <div className={`w-4 h-4 rounded-full ${(() => {
+                              const statuses = questionsInSection.map(q => ({
+                                status: getQuestionStatus(q, selectedSubmission),
+                                required: q.required
+                              }));
+
+                              // Red: Any incorrect OR any unanswered required questions
+                              if (statuses.some(s => s.status === 'incorrect') ||
+                                  statuses.some(s => s.status === 'unanswered' && s.required)) {
+                                return 'bg-red-500';
+                              }
+
+                              // Green: All answered AND all marked correct
+                              if (statuses.every(s => s.status === 'correct')) {
+                                return 'bg-green-500';
+                              }
+
+                              // Yellow: Has unanswered optional OR answered but not graded
+                              return 'bg-yellow-500';
+                            })()}`}>
                             </div>
                           </div>
                         </button>
                       );
                     })}
+                  </div>
+
+                  {/* Status Circle Legend */}
+                  <div className="mt-4 px-2 py-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Status Legend:</p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0"></div>
+                        <span className="text-xs text-gray-600">All correct</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0"></div>
+                        <span className="text-xs text-gray-600">Has issues or missing required</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-yellow-500 flex-shrink-0"></div>
+                        <span className="text-xs text-gray-600">Not fully graded</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -2289,112 +2365,111 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
                       <button
                         onClick={handleChromatogramToggle}
-                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors text-sm ${showChromatogram
-                          ? 'bg-purple-600 text-white hover:bg-purple-700'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
+                        className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
                       >
                         <BarChart3 className="w-4 h-4" />
-                        <span>{showChromatogram ? 'Hide Chromatogram' : 'Show Chromatogram'}</span>
+                        <span>Show Chromatogram</span>
                       </button>
                     </div>
-                    {/* Chromatogram Section */}
-                    {showChromatogram && (
-                      <div className="mt-6 border-t border-gray-200 pt-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                          <BarChart3 className="w-5 h-5 text-purple-600" />
-                          <span>Chromatogram Viewer</span>
-                        </h3>
-
-                        {loadingChromatogram ? (
-                          <div className="bg-gray-50 rounded-lg p-8 text-center">
-                            <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                            <p className="text-gray-600">Loading chromatogram data...</p>
-                          </div>
-                        ) : chromatogramData ? (
-                          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                            <ChromatogramViewer
-                              fileData={chromatogramData}
-                              fileName={selectedSubmission.filename || selectedSubmission.originalName || selectedSubmission.cloneName}
-                              fileType={selectedSubmission.type}
-                              onClose={() => setShowChromatogram(false)}
-                            />
-                          </div>
-                        ) : (
-                          <div className="bg-gray-50 rounded-lg p-8 text-center">
-                            <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">No chromatogram data available</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
 
                 {/* Scrollable Content Area */}
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
                   {/* Two-Column Questions Layout */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-5">
                     {getQuestionsForSection(currentViewingSection, selectedSubmission.answers).map((question, index) => {
                       const commentData = getQuestionCommentData(question.id);
                       const isMarkedCorrect = commentData.isCorrect === true;
                       const isMarkedIncorrect = commentData.isCorrect === false;
+                      const questionStatus = getQuestionStatus(question, selectedSubmission);
+                      const isUnanswered = questionStatus === 'unanswered';
 
                       return (
                         <div
                           key={question.id}
-                          className={`border rounded-lg p-4 bg-white ${isMarkedCorrect ? 'border-green-500 bg-green-50' :
+                          className={`border-2 rounded-lg shadow-md overflow-hidden ${
+                            isMarkedCorrect ? 'border-green-500 bg-green-50' :
                             isMarkedIncorrect ? 'border-red-400 bg-red-50' :
-                              'border-gray-200'
+                            isUnanswered ? 'border-gray-300 bg-gray-100' :
+                            'border-gray-300 bg-white'
                             }`}
                         >
                           {/* Question Header with Correct/Incorrect Buttons */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center space-x-2 flex-1">
-                              <span className="text-xs font-medium text-gray-600 bg-white px-2 py-1 rounded">
-                                Q{index + 1}
-                              </span>
-                              {isMarkedCorrect && (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              )}
-                              {isMarkedIncorrect && (
-                                <XCircle className="w-4 h-4 text-red-600" />
-                              )}
-                              <p className="font-medium text-sm text-gray-900">
-                                {question.text}
-                              </p>
-                            </div>
+                          <div className={`p-3 border-b ${
+                            isMarkedCorrect ? 'bg-green-100 border-green-200' :
+                            isMarkedIncorrect ? 'bg-red-100 border-red-200' :
+                            isUnanswered ? 'bg-gray-200 border-gray-300' :
+                            'bg-gray-100 border-gray-200'
+                          }`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2 flex-1">
+                                <span className="text-xs font-bold text-gray-700 bg-white px-2 py-1 rounded shadow-sm">
+                                  Q{index + 1}
+                                </span>
+                                {isMarkedCorrect && (
+                                  <CheckCircle className="w-4 h-4 text-green-600" />
+                                )}
+                                {isMarkedIncorrect && (
+                                  <XCircle className="w-4 h-4 text-red-600" />
+                                )}
+                                <p
+                                  className="font-medium text-sm text-gray-900"
+                                  dangerouslySetInnerHTML={{ __html: question.text }}
+                                />
+                              </div>
 
-                            {/* Correct/Incorrect Toggle Buttons */}
-                            <div className="flex items-center space-x-1 flex-shrink-0">
-                              <button
-                                onClick={() => markQuestionAsCorrect(question.id)}
-                                className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedCorrect
-                                  ? 'bg-green-600 text-white'
-                                  : 'bg-gray-200 text-gray-700 hover:bg-green-100'
-                                  }`}
-                              >
-                                <CheckCircle className="w-3 h-3" />
-                                <span>Correct</span>
-                              </button>
-                              <button
-                                onClick={() => markQuestionAsIncorrect(question.id)}
-                                className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedIncorrect
-                                  ? 'bg-red-600 text-white'
-                                  : 'bg-gray-200 text-gray-700 hover:bg-red-100'
-                                  }`}
-                              >
-                                <XCircle className="w-3 h-3" />
-                                <span>Incorrect</span>
-                              </button>
+                              {/* Correct/Incorrect Toggle Buttons */}
+                              <div className="flex items-center space-x-1 flex-shrink-0">
+                                <button
+                                  onClick={() => markQuestionAsCorrect(question.id)}
+                                  className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedCorrect
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-white text-gray-700 hover:bg-green-100 shadow-sm'
+                                    }`}
+                                >
+                                  <CheckCircle className="w-3 h-3" />
+                                  <span>Correct</span>
+                                </button>
+                                <button
+                                  onClick={() => markQuestionAsIncorrect(question.id)}
+                                  className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedIncorrect
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-white text-gray-700 hover:bg-red-100 shadow-sm'
+                                    }`}
+                                >
+                                  <XCircle className="w-3 h-3" />
+                                  <span>Incorrect</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
 
+                          {/* Card Body */}
+                          <div className="p-3">
+
+                          {/* Unanswered Question Indicator */}
+                          {isUnanswered && (
+                            <div className="mb-2 bg-orange-50 border-l-4 border-orange-400 p-2 rounded">
+                              <div className="flex items-center">
+                                <svg className="w-4 h-4 text-orange-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-xs font-semibold text-orange-800">
+                                  {question.required ? 'Required Question Not Answered' : 'Optional Question Not Answered'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Student Answer Display */}
-                          <div className="mb-3">
-                            <p className="text-sm font-medium text-gray-700 mb-2">Student Answer:</p>
-                            <div className="bg-gray-50 p-3 rounded border text-sm">
-                              {renderAnswerContent(question, selectedSubmission.answers[question.id])}
+                          <div className="mb-2">
+                            <p className="text-xs font-medium text-gray-700 mb-1">Student Answer:</p>
+                            <div className="bg-gray-50 p-2 rounded border text-sm">
+                              {isUnanswered
+                                ? <span className="text-gray-400 italic">No answer provided</span>
+                                : renderAnswerContent(question, selectedSubmission.answers[question.id])
+                              }
                             </div>
 
                             {/* Practice Answer Comparison */}
@@ -2404,14 +2479,29 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                           </div>
 
                           {/* Feedback Section */}
-                          <div className="space-y-3 border-t pt-3">
-                            {/* Feedback Textarea with Common Feedback Dropdown */}
+                          <div className="space-y-2 border-t pt-2">
+                            {/* Feedback Textarea with inline controls */}
                             <div>
-                              <div className="flex items-center justify-between mb-2">
-                                <label className="text-xs font-medium text-gray-700">
-                                  Feedback for Student
-                                </label>
-                                {/* Common Feedback Dropdown */}
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center space-x-2">
+                                  <label className="text-xs font-medium text-gray-700">
+                                    Feedback for Student
+                                  </label>
+                                  {/* Visibility Checkbox - next to label */}
+                                  <div className="flex items-center space-x-1">
+                                    <input
+                                      type="checkbox"
+                                      id={`visible-${question.id}`}
+                                      checked={commentData.feedbackVisible}
+                                      onChange={(e) => updateFeedbackVisibility(question.id, e.target.checked)}
+                                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-3 h-3"
+                                    />
+                                    <label htmlFor={`visible-${question.id}`} className="text-xs text-gray-600">
+                                      Visible
+                                    </label>
+                                  </div>
+                                </div>
+                                {/* Common Feedback Dropdown - fixed width */}
                                 {getCommonFeedbackForQuestion(question.id).length > 0 && (
                                   <select
                                     onChange={(e) => {
@@ -2425,7 +2515,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                                         e.target.value = ''; // Reset dropdown
                                       }
                                     }}
-                                    className="text-xs border border-gray-300 rounded px-2 py-1"
+                                    className="text-xs border border-gray-300 rounded px-2 py-0.5 min-w-48 max-w-64"
                                   >
                                     <option value="">Quick Feedback...</option>
                                     {getCommonFeedbackForQuestion(question.id).map(option => (
@@ -2442,41 +2532,59 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                                 onChange={(e) => addComment(question.id, e.target.value, commentData.feedbackVisible)}
                                 placeholder="Add feedback for the student..."
                                 rows={2}
-                                className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
                               />
-
-                              {/* Visibility Checkbox */}
-                              <div className="flex items-center space-x-2 mt-2">
-                                <input
-                                  type="checkbox"
-                                  id={`visible-${question.id}`}
-                                  checked={commentData.feedbackVisible}
-                                  onChange={(e) => updateFeedbackVisibility(question.id, e.target.checked)}
-                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                <label htmlFor={`visible-${question.id}`} className="text-xs text-gray-700">
-                                  Visible to student
-                                </label>
-                              </div>
                             </div>
 
-                            {/* Correct Answer Field (Director-Only Reference) */}
-                            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                              <label className="text-xs font-medium text-yellow-900 mb-1 flex items-center space-x-1">
-                                <Eye className="w-3 h-3" />
-                                <span>Correct Answer (Director-Only Reference)</span>
-                              </label>
-                              <textarea
-                                value={commentData.correctAnswer}
-                                onChange={(e) => updateCorrectAnswer(question.id, e.target.value)}
-                                placeholder="Enter the correct answer for reference (never shown to students)..."
-                                rows={2}
-                                className="w-full text-sm border border-yellow-300 rounded px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                              />
-                              <p className="text-xs text-yellow-700 mt-1">
-                                ⚠️ This field is only visible to Directors/Instructors, never to students
-                              </p>
+                            {/* Collapsible Correct Answer Field (Director-Only Reference) */}
+                            <div className="bg-yellow-50 border border-yellow-200 rounded">
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedDirectorNotes);
+                                  if (newExpanded.has(question.id)) {
+                                    newExpanded.delete(question.id);
+                                  } else {
+                                    newExpanded.add(question.id);
+                                  }
+                                  setExpandedDirectorNotes(newExpanded);
+                                }}
+                                className="w-full px-2 py-1.5 flex items-center justify-between hover:bg-yellow-100 transition-colors"
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <Eye className="w-3 h-3 text-yellow-700" />
+                                  <span className="text-xs font-medium text-yellow-900">Director Reference</span>
+                                  {commentData.correctAnswer && (
+                                    <span className="text-xs text-yellow-700">(has notes)</span>
+                                  )}
+                                </div>
+                                <svg
+                                  className={`w-4 h-4 text-yellow-700 transition-transform ${
+                                    expandedDirectorNotes.has(question.id) ? 'rotate-180' : ''
+                                  }`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+
+                              {expandedDirectorNotes.has(question.id) && (
+                                <div className="px-2 pb-2">
+                                  <textarea
+                                    value={commentData.correctAnswer}
+                                    onChange={(e) => updateCorrectAnswer(question.id, e.target.value)}
+                                    placeholder="Correct answer reference (never shown to students)..."
+                                    rows={2}
+                                    className="w-full text-xs border border-yellow-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                  />
+                                  <p className="text-xs text-yellow-700 mt-1">
+                                    Director/Instructor only - never visible to students
+                                  </p>
+                                </div>
+                              )}
                             </div>
+                          </div>
                           </div>
                         </div>
                       );
@@ -2488,37 +2596,6 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                     <div className="text-center py-12">
                       <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                       <p className="text-gray-600">No questions in this section yet.</p>
-                    </div>
-                  )}
-
-                  {/* Chromatogram Section */}
-                  {showChromatogram && (
-                    <div className="mt-6 border-t border-gray-200 pt-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                        <BarChart3 className="w-5 h-5 text-purple-600" />
-                        <span>Chromatogram Viewer</span>
-                      </h3>
-
-                      {loadingChromatogram ? (
-                        <div className="bg-gray-50 rounded-lg p-8 text-center">
-                          <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                          <p className="text-gray-600">Loading chromatogram data...</p>
-                        </div>
-                      ) : chromatogramData ? (
-                        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                          <ChromatogramViewer
-                            fileData={chromatogramData}
-                            fileName={selectedSubmission.filename || selectedSubmission.originalName || selectedSubmission.cloneName}
-                            fileType={selectedSubmission.type}
-                            onClose={() => setShowChromatogram(false)}
-                          />
-                        </div>
-                      ) : (
-                        <div className="bg-gray-50 rounded-lg p-8 text-center">
-                          <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600">No chromatogram data available</p>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -2598,6 +2675,16 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
           sequenceType={selectedSequenceData.sequenceType}
         />
       )}
+
+      {/* Draggable Chromatogram Modal */}
+      <DraggableChromogramModal
+        isOpen={showChromatogram}
+        onClose={() => setShowChromatogram(false)}
+        chromatogramData={chromatogramData}
+        loading={loadingChromatogram}
+        fileName={selectedSubmission?.filename || selectedSubmission?.originalName || selectedSubmission?.cloneName}
+        fileType={selectedSubmission?.type}
+      />
     </>
   );
 };
