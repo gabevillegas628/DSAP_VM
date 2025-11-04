@@ -317,7 +317,9 @@ const DirectorEditQuestions = () => {
           } :
             updates.type === 'blast_comparison' ? {
               blastQuestion1Id: updates.options?.blastQuestion1Id,
-              blastQuestion2Id: updates.options?.blastQuestion2Id
+              blastQuestion2Id: updates.options?.blastQuestion2Id,
+              table1Title: updates.options?.table1Title,
+              table2Title: updates.options?.table2Title
             } :
               updates.type === 'sequence_range' ? {
                 label1: updates.options?.label1 || 'Begin',
@@ -385,7 +387,9 @@ const DirectorEditQuestions = () => {
     if (question.type === 'blast_comparison' && question.options) {
       optionsToSet = {
         blastQuestion1Id: question.options.blastQuestion1Id,
-        blastQuestion2Id: question.options.blastQuestion2Id
+        blastQuestion2Id: question.options.blastQuestion2Id,
+        table1Title: question.options.table1Title || '',
+        table2Title: question.options.table2Title || ''
       };
     } else if (question.type === 'select') {
       optionsToSet = question.options || [];
@@ -424,7 +428,9 @@ const DirectorEditQuestions = () => {
           } :
             newAnalysisQuestion.type === 'blast_comparison' ? {
               blastQuestion1Id: newAnalysisQuestion.options?.blastQuestion1Id,
-              blastQuestion2Id: newAnalysisQuestion.options?.blastQuestion2Id
+              blastQuestion2Id: newAnalysisQuestion.options?.blastQuestion2Id,
+              table1Title: newAnalysisQuestion.options?.table1Title,
+              table2Title: newAnalysisQuestion.options?.table2Title
             } :
               newAnalysisQuestion.type === 'sequence_range' ? {
                 label1: newAnalysisQuestion.options?.label1 || 'Begin',
@@ -892,6 +898,24 @@ const DirectorEditQuestions = () => {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
+                            First Table Title (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={newAnalysisQuestion.options?.table1Title || ''}
+                            onChange={(e) => {
+                              setNewAnalysisQuestion({
+                                ...newAnalysisQuestion,
+                                options: {
+                                  ...newAnalysisQuestion.options,
+                                  table1Title: e.target.value
+                                }
+                              });
+                            }}
+                            placeholder="Leave blank to use source question text"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm mb-2"
+                          />
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
                             First BLAST Question
                           </label>
                           <select
@@ -923,6 +947,24 @@ const DirectorEditQuestions = () => {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Second Table Title (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={newAnalysisQuestion.options?.table2Title || ''}
+                            onChange={(e) => {
+                              setNewAnalysisQuestion({
+                                ...newAnalysisQuestion,
+                                options: {
+                                  ...newAnalysisQuestion.options,
+                                  table2Title: e.target.value
+                                }
+                              });
+                            }}
+                            placeholder="Leave blank to use source question text"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm mb-2"
+                          />
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
                             Second BLAST Question
                           </label>
                           <select
@@ -950,7 +992,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.blastQuestion1Id && newAnalysisQuestion.options?.blastQuestion2Id && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Comparison will show results from these two BLAST questions side by side
+                          ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Comparison will show results from these two BLAST questions side by side
                         </div>
                       )}
                     </div>
@@ -989,7 +1031,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.sourceQuestionId && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Will display sequence from the selected question for highlighting
+                          ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Will display sequence from the selected question for highlighting
                         </div>
                       )}
                     </div>
@@ -1420,6 +1462,20 @@ const DirectorEditQuestions = () => {
                                           <h6 className="text-sm font-medium text-gray-700">BLAST Comparison Configuration</h6>
                                           <div className="grid grid-cols-2 gap-3">
                                             <div>
+                                              <label className="block text-xs font-medium text-gray-600 mb-1">First Table Title (Optional)</label>
+                                              <input
+                                                type="text"
+                                                value={newAnalysisQuestion.options?.table1Title || ''}
+                                                onChange={(e) => setNewAnalysisQuestion({
+                                                  ...newAnalysisQuestion,
+                                                  options: {
+                                                    ...newAnalysisQuestion.options,
+                                                    table1Title: e.target.value
+                                                  }
+                                                })}
+                                                placeholder="Leave blank to use source question text"
+                                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-2"
+                                              />
                                               <label className="block text-xs font-medium text-gray-600 mb-1">First BLAST Question</label>
                                               <select
                                                 value={newAnalysisQuestion.options?.blastQuestion1Id || ''}
@@ -1443,6 +1499,20 @@ const DirectorEditQuestions = () => {
                                               </select>
                                             </div>
                                             <div>
+                                              <label className="block text-xs font-medium text-gray-600 mb-1">Second Table Title (Optional)</label>
+                                              <input
+                                                type="text"
+                                                value={newAnalysisQuestion.options?.table2Title || ''}
+                                                onChange={(e) => setNewAnalysisQuestion({
+                                                  ...newAnalysisQuestion,
+                                                  options: {
+                                                    ...newAnalysisQuestion.options,
+                                                    table2Title: e.target.value
+                                                  }
+                                                })}
+                                                placeholder="Leave blank to use source question text"
+                                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-2"
+                                              />
                                               <label className="block text-xs font-medium text-gray-600 mb-1">Second BLAST Question</label>
                                               <select
                                                 value={newAnalysisQuestion.options?.blastQuestion2Id || ''}
@@ -1643,7 +1713,7 @@ const DirectorEditQuestions = () => {
                   onClick={() => setManagingGroupsForStep(null)}
                   className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
                 >
-                  Ã—
+                  Ãƒâ€”
                 </button>
               </div>
               <p className="text-sm text-gray-600 mt-2">

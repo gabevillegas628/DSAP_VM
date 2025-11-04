@@ -1074,7 +1074,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
     }
 
     // Then recursively check if the dependent question is itself visible
-    // This handles cascading conditional logic (Q1 → Q2 → Q3)
+    // This handles cascading conditional logic (Q1 â†’ Q2 â†’ Q3)
     const dependentQuestion = analysisQuestions.find(q => q.id === showIf.questionId);
     if (dependentQuestion) {
       return shouldShowQuestion(dependentQuestion);
@@ -1618,9 +1618,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                         comment.isCorrect === false ? 'text-red-800' :
                           'text-blue-800'
                         }`}>
-                        {comment.isCorrect === true ? 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Correct' :
-                          comment.isCorrect === false ? 'ÃƒÂ¢Ã…â€œÃ¢â‚¬â€ Needs Improvement' :
-                            'ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ Instructor Feedback'}
+                        {comment.isCorrect === true ? 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Correct' :
+                          comment.isCorrect === false ? 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Needs Improvement' :
+                            'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¹ Instructor Feedback'}
                       </span>
                     </div>
 
@@ -1738,8 +1738,8 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
           {/* First BLAST Results Table */}
           <div>
             <h5 className="font-medium text-gray-700 mb-3">
-              {blast1Question?.options?.blastTitle || blast1Question?.text?.substring(0, 50) || 'BLAST Results 1'}
-            </h5>
+  {question.options?.table1Title || blast1Question?.text?.substring(0, 50) || 'BLAST Results 1'}
+</h5>
             {!blast1Answer ? (
               <div className="text-sm text-gray-500 italic bg-gray-50 p-3 rounded">
                 Results will appear here once you complete the previous BLAST question.
@@ -1781,7 +1781,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
           {/* Second BLAST Results Table */}
           <div>
             <h5 className="font-medium text-gray-700 mb-3">
-              {blast2Question?.options?.blastTitle || blast2Question?.text?.substring(0, 50) || 'BLAST Results 2'}
+              {question.options?.table2Title || blast2Question?.text?.substring(0, 50) || 'BLAST Results 2'}
             </h5>
             {!blast2Answer ? (
               <div className="text-sm text-gray-500 italic bg-gray-50 p-3 rounded">
