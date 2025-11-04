@@ -6833,7 +6833,8 @@ app.post('/api/practice-clones/bulk-upload', upload.array('files'), authenticate
           const key = matchedClone.filename;
 
           const filePath = path.join(__dirname, 'uploads', matchedClone.filename);
-          fs.writeFileSync(filePath, file.buffer);
+          //fs.writeFileSync(filePath, file.buffer);
+          fs.renameSync(file.path, filePath);
           console.log('Saved file locally:', filePath);
 
           // Update the practice clone record if needed
