@@ -42,6 +42,18 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
     const handleKeyPress = (e) => {
       if (selectedPosition === null || isEditing || showConfirmModal) return;
       
+      // CRITICAL: Ignore keypresses if user is typing in a form field
+      // Use e.target instead of document.activeElement for reliability
+      const targetElement = e.target;
+      if (
+        targetElement.tagName === 'INPUT' ||
+        targetElement.tagName === 'TEXTAREA' ||
+        targetElement.isContentEditable ||
+        targetElement.getAttribute('contenteditable') === 'true'
+      ) {
+        return;
+      }
+      
       const key = e.key.toUpperCase();
       if (['A', 'T', 'G', 'C', 'N'].includes(key)) {
         // Show confirmation modal before editing
@@ -1247,7 +1259,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
                   <div className="text-xs text-gray-500 mb-1">From</div>
                   <div className="text-2xl font-bold text-red-600">{pendingEdit.oldBase}</div>
                 </div>
-                <div className="text-2xl text-gray-400">→</div>
+                <div className="text-2xl text-gray-400">&rarr;</div>
                 <div className="text-center">
                   <div className="text-xs text-gray-500 mb-1">To</div>
                   <div className="text-2xl font-bold text-green-600">{pendingEdit.newBase}</div>
