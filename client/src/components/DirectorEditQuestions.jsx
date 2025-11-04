@@ -735,6 +735,7 @@ const DirectorEditQuestions = () => {
                         <option value="blast">BLAST Results - Student enters BLAST search results</option>
                         <option value="blast_comparison">BLAST Table Comparison - Compare two BLAST result tables</option>
                         <option value="sequence_display">Sequence Display - Display sequence from another question</option>
+                        <option value="text_header">Text Header - Display-only text with formatting (no answer required)</option>
                       </select>
                     </div>
 
@@ -949,7 +950,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.blastQuestion1Id && newAnalysisQuestion.options?.blastQuestion2Id && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          Ã¢Å“â€œ Comparison will show results from these two BLAST questions side by side
+                          ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Comparison will show results from these two BLAST questions side by side
                         </div>
                       )}
                     </div>
@@ -988,7 +989,7 @@ const DirectorEditQuestions = () => {
 
                       {newAnalysisQuestion.options?.sourceQuestionId && (
                         <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
-                          Ã¢Å“â€œ Will display sequence from the selected question for highlighting
+                          ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Will display sequence from the selected question for highlighting
                         </div>
                       )}
                     </div>
@@ -1267,6 +1268,7 @@ const DirectorEditQuestions = () => {
                                             <option value="blast">BLAST Results - Student enters BLAST search results</option>
                                             <option value="blast_comparison">BLAST Table Comparison - Compare two BLAST result tables</option>
                                             <option value="sequence_display">Sequence Display - Display sequence from another question</option>
+                                            <option value="text_header">Text Header - Display-only text with formatting (no answer required)</option>
                                           </select>
                                         </div>
                                       </div>
@@ -1641,7 +1643,7 @@ const DirectorEditQuestions = () => {
                   onClick={() => setManagingGroupsForStep(null)}
                   className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
               <p className="text-sm text-gray-600 mt-2">

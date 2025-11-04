@@ -62,10 +62,10 @@ const SubmitConfirmationModal = ({ isOpen, onClose, onConfirm, cloneName, progre
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="text-sm font-medium text-blue-900 mb-2">What happens next:</h4>
             <ul className="space-y-1 text-sm text-blue-800">
-              <li>• Your analysis will be submitted to instructors</li>
-              <li>• You won't be able to edit until review is complete</li>
-              <li>• You'll receive feedback through the messaging system</li>
-              <li>• If changes are needed, editing will be re-enabled</li>
+              <li>&bull; Your analysis will be submitted to instructors</li>
+              <li>&bull; You won't be able to edit until review is complete</li>
+              <li>&bull; You'll receive feedback through the messaging system</li>
+              <li>&bull; If changes are needed, editing will be re-enabled</li>
             </ul>
           </div>
         </div>
@@ -1068,7 +1068,19 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
     const { showIf } = question.conditionalLogic;
     const dependentAnswer = answers[showIf.questionId];
 
-    return dependentAnswer === showIf.answer;
+    // First check if the answer matches
+    if (dependentAnswer !== showIf.answer) {
+      return false;
+    }
+
+    // Then recursively check if the dependent question is itself visible
+    // This handles cascading conditional logic (Q1 → Q2 → Q3)
+    const dependentQuestion = analysisQuestions.find(q => q.id === showIf.questionId);
+    if (dependentQuestion) {
+      return shouldShowQuestion(dependentQuestion);
+    }
+
+    return true;
   };
 
   const getCurrentStepQuestions = () => {
@@ -1606,9 +1618,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                         comment.isCorrect === false ? 'text-red-800' :
                           'text-blue-800'
                         }`}>
-                        {comment.isCorrect === true ? 'Ã¢Å“â€œ Correct' :
-                          comment.isCorrect === false ? 'Ã¢Å“â€” Needs Improvement' :
-                            'Ã¢â€žÂ¹ Instructor Feedback'}
+                        {comment.isCorrect === true ? 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Correct' :
+                          comment.isCorrect === false ? 'ÃƒÂ¢Ã…â€œÃ¢â‚¬â€ Needs Improvement' :
+                            'ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ Instructor Feedback'}
                       </span>
                     </div>
 
@@ -2093,7 +2105,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                   Progress: {getOverallProgress()}%
                   {lastSaved && (
                     <span className="text-green-600 ml-2">
-                      • Auto-saved at {lastSaved instanceof Date ? lastSaved.toLocaleTimeString() : 'unknown time'}
+                      &bull; Auto-saved at {lastSaved instanceof Date ? lastSaved.toLocaleTimeString() : 'unknown time'}
                     </span>
                   )}
                   {(() => {
@@ -2101,7 +2113,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                     if (!config) return null;
                     return (
                       <>
-                        <span className={`ml-2 ${config.textColor}`}>• {config.message}</span>
+                        <span className={`ml-2 ${config.textColor}`}>&bull; {config.message}</span>
                         {config.showRefresh && (
                           <button
                             onClick={refreshStatus}
@@ -2212,7 +2224,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                       <div>
                                         <p className="text-sm font-medium">{group.name}</p>
                                         <p className={`text-xs ${isCurrentGroup ? 'text-emerald-200' : 'text-gray-500'}`}>
-                                          {group.questions.length} question{group.questions.length !== 1 ? 's' : ''} • {groupProgress}%
+                                          {group.questions.length} question{group.questions.length !== 1 ? 's' : ''} &bull; {groupProgress}%
                                         </p>
                                       </div>
                                     </div>

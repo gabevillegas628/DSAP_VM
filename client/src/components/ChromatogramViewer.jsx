@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, Download } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Download, Eye, EyeOff } from 'lucide-react';
 
 const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
   console.log('ChromatogramViewer props:', { fileData, fileName }); // Debug log
@@ -7,7 +7,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
   const [parsedData, setParsedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [zoomLevel, setZoomLevel] = useState(2.5);
+  const [zoomLevel, setZoomLevel] = useState(1.5);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [showChannels, setShowChannels] = useState({
     A: true,
@@ -31,6 +31,66 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [editedPositions, setEditedPositions] = useState(new Set());
+
+  // Add state for confirmation modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState(null); // {position, oldBase, newBase}
+
+
+  // Add keyboard shortcuts for editing bases
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (selectedPosition === null || isEditing || showConfirmModal) return;
+      
+      const key = e.key.toUpperCase();
+      if (['A', 'T', 'G', 'C', 'N'].includes(key)) {
+        // Show confirmation modal before editing
+        const oldBase = parsedData.baseCalls[selectedPosition];
+        setPendingEdit({
+          position: selectedPosition,
+          oldBase: oldBase,
+          newBase: key
+        });
+        setShowConfirmModal(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [selectedPosition, isEditing, parsedData, showConfirmModal]);
+
+  // Function to confirm the base edit
+  const confirmBaseEdit = () => {
+    if (!pendingEdit) return;
+
+    const { position, newBase } = pendingEdit;
+    const newBaseCalls = [...parsedData.baseCalls];
+    newBaseCalls[position] = newBase;
+
+    const newParsedData = {
+      ...parsedData,
+      baseCalls: newBaseCalls,
+      sequence: newBaseCalls.join('')
+    };
+
+    setEditedPositions(prev => new Set([...prev, position]));
+    setParsedData(newParsedData);
+    setSelectedNucleotide(newBase);
+    
+    console.log(`Edited position ${position + 1} from ${pendingEdit.oldBase} to ${newBase}`);
+    
+    // Close modal and clear pending edit
+    setShowConfirmModal(false);
+    setPendingEdit(null);
+  };
+
+  // Function to cancel the base edit
+  const cancelBaseEdit = () => {
+    setShowConfirmModal(false);
+    setPendingEdit(null);
+  };
+
+
 
   useEffect(() => {
     if (fileData) {
@@ -97,7 +157,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
     };
-  }, [scrollPosition]);
+  }, [parsedData]); // Only re-attach when parsedData changes, not on every scroll
 
   const handleSaveEdit = () => {
     if (!editValue || selectedPosition === null) return;
@@ -1173,6 +1233,45 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
 
   return (
     <div className="bg-white rounded-lg border">
+      {/* Confirmation Modal */}
+      {showConfirmModal && pendingEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={cancelBaseEdit}>
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Base Change</h3>
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Are you sure you want to change the base at position <span className="font-bold">{pendingEdit.position + 1}</span>?
+              </p>
+              <div className="flex items-center justify-center space-x-4 p-4 bg-gray-50 rounded">
+                <div className="text-center">
+                  <div className="text-xs text-gray-500 mb-1">From</div>
+                  <div className="text-2xl font-bold text-red-600">{pendingEdit.oldBase}</div>
+                </div>
+                <div className="text-2xl text-gray-400">→</div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-500 mb-1">To</div>
+                  <div className="text-2xl font-bold text-green-600">{pendingEdit.newBase}</div>
+                </div>
+              </div>
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={cancelBaseEdit}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBaseEdit}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex justify-between items-center mb-4">
@@ -1198,7 +1297,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
                 className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 flex items-center space-x-1"
                 title="Close chromatogram viewer"
               >
-                <span>×</span>
+                <span>&times;</span>
                 <span>Close</span>
               </button>
             )}
@@ -1225,195 +1324,76 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
               <ZoomIn className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Channel Toggles */}
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Channels:</span>
-            {Object.entries(showChannels).map(([channel, visible]) => (
-              <button
-                key={channel}
-                onClick={() => toggleChannel(channel)}
-                className={`px-2 py-1 text-xs rounded font-mono ${visible
-                  ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
-                  : 'bg-gray-100 text-gray-500 border border-gray-300'
-                  }`}
-              >
-                {channel}
-              </button>
-            ))}
-          </div>
-
-          {/* FIX: Add Quality Threshold Control */}
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Quality:</span>
-            <input
-              type="range"
-              min="0"
-              max="60"
-              value={qualityThreshold}
-              onChange={(e) => setQualityThreshold(parseInt(e.target.value))}
-              className="w-16 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-            <span className="text-xs text-gray-600 min-w-[2rem]">{qualityThreshold}</span>
-          </div>
-
-          {/* Navigation Controls */}
-          <div className="flex items-center space-x-1">
-            <span className="text-sm font-medium text-gray-700">Navigate:</span>
-            <div className="flex space-x-1">
-              <button
-                onClick={() => setScrollPosition(Math.max(0, scrollPosition - 0.1))}
-                className="px-1.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                disabled={scrollPosition === 0}
-                title="Move backward"
-              >
-                ←
-              </button>
-              <button
-                onClick={() => setScrollPosition(Math.min(1, scrollPosition + 0.1))}
-                className="px-1.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                disabled={scrollPosition === 1}
-                title="Move forward"
-              >
-                →
-              </button>
-              <button
-                onClick={() => setScrollPosition(0)}
-                className="px-1.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                title="Go to start"
-              >
-                Start
-              </button>
-              <button
-                onClick={() => setScrollPosition(1)}
-                className="px-1.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                title="Go to end"
-              >
-                End
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
       {/* Chromatogram Canvas */}
       <div className="p-4">
-        {/* Selected position display */}
-        {selectedPosition !== null && selectedNucleotide && (
-          <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center font-bold">
-                {selectedNucleotide}
-              </div>
-              <div className="flex-1">
-                <p className="text-orange-900 font-medium text-lg">
-                  {selectedNucleotide}{selectedPosition + 1}
-                </p>
-                {isEditing ? (
-                  <div className="flex items-center space-x-2 mt-2">
-                    <label className="text-orange-700 text-sm">Change to:</label>
-                    <select
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="px-2 py-1 border border-orange-300 rounded text-sm"
-                    >
-                      <option value="">Select</option>
-                      <option value="A">A (Adenine)</option>
-                      <option value="T">T (Thymine)</option>
-                      <option value="G">G (Guanine)</option>
-                      <option value="C">C (Cytosine)</option>
-                      <option value="N">N (Unknown)</option>
-                    </select>
-                    <button
-                      onClick={handleSaveEdit}
-                      disabled={!editValue}
-                      className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-orange-700 text-sm">
-                    Position {selectedPosition + 1} • Click Edit to modify
-                  </p>
-                )}
-              </div>
-              <div className="flex space-x-2">
-                {!isEditing && (
+        {/* Combined Controls: Selected Position + Highlight */}
+        <div className="mb-2 p-3 bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Selected Position Section */}
+            {selectedPosition !== null && selectedNucleotide ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-orange-900">
+                    Selected: <span className="font-bold">{selectedNucleotide}{selectedPosition + 1}</span>
+                  </span>
+                  <span className="text-xs text-orange-700">
+                    (Press A/T/G/C/N)
+                  </span>
+                  {editedPositions.has(selectedPosition) && (
+                    <span className="text-xs text-green-600 font-medium">&bull; Edited</span>
+                  )}
                   <button
                     onClick={() => {
-                      setIsEditing(true);
-                      setEditValue(selectedNucleotide);
+                      setSelectedPosition(null);
+                      setSelectedNucleotide(null);
                     }}
-                    className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                    className="text-orange-600 hover:text-orange-800 text-lg leading-none"
+                    title="Clear selection"
                   >
-                    Edit
+                    &times;
                   </button>
-                )}
-                <button
-                  onClick={() => {
-                    setSelectedPosition(null);
-                    setSelectedNucleotide(null);
-                    setIsEditing(false);
-                    setEditValue('');
-                  }}
-                  className="text-orange-600 hover:text-orange-800"
-                  title="Clear selection"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Sequence Highlight Controls */}
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h5 className="text-sm font-medium text-yellow-900 mb-3">Sequence Highlight & Copy</h5>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-            <div>
-              <label className="block text-xs font-medium text-yellow-800 mb-1">Start Position</label>
+                </div>
+                <div className="h-6 w-px bg-gray-300"></div>
+              </>
+            ) : (
+              <span className="text-sm text-gray-500 italic">Click a base to select</span>
+            )}
+            
+            {/* Highlight Section */}
+            <div className="flex items-center gap-2 flex-1">
+              <span className="text-sm font-medium text-yellow-900">Highlight:</span>
               <input
                 type="number"
                 value={highlightStart}
                 onChange={(e) => setHighlightStart(e.target.value)}
-                placeholder="1"
+                placeholder="Start"
                 min="1"
                 max={parsedData?.sequenceLength - 1 || 0}
-                className="w-full px-2 py-1 text-sm border border-yellow-300 rounded focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500"
+                className="w-16 px-2 py-1 text-sm border border-yellow-300 rounded focus:ring-1 focus:ring-yellow-500"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-yellow-800 mb-1">End Position</label>
+              <span className="text-sm text-yellow-700">to</span>
               <input
                 type="number"
                 value={highlightEnd}
                 onChange={(e) => setHighlightEnd(e.target.value)}
-                placeholder={parsedData?.sequenceLength || 1}
+                placeholder="End"
                 min="0"
                 max={parsedData?.sequenceLength || 1}
-                className="w-full px-2 py-1 text-sm border border-yellow-300 rounded focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500"
+                className="w-16 px-2 py-1 text-sm border border-yellow-300 rounded focus:ring-1 focus:ring-yellow-500"
               />
-            </div>
-            <div className="flex space-x-2">
               <button
                 onClick={() => setShowHighlight(!showHighlight)}
                 disabled={!highlightStart || !highlightEnd}
-                className={`px-3 py-1 text-sm rounded transition duration-200 ${showHighlight
+                className={`px-2 py-1 text-sm rounded ${showHighlight
                   ? 'bg-yellow-600 text-white hover:bg-yellow-700'
                   : 'bg-white text-yellow-700 border border-yellow-300 hover:bg-yellow-50'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  } disabled:opacity-50`}
               >
-                {showHighlight ? 'Hide' : 'Show'} Highlight
+                {showHighlight ? 'Hide' : 'Show'}
               </button>
-            </div>
-            <div>
               <button
                 onClick={() => {
                   if (highlightStart && highlightEnd && parsedData) {
@@ -1421,46 +1401,30 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
                     const endPos = parseInt(highlightEnd) - 1;
                     if (!isNaN(startPos) && !isNaN(endPos) && startPos >= 0 && endPos < parsedData.baseCalls.length && startPos <= endPos) {
                       const sequence = parsedData.baseCalls.slice(startPos, endPos + 1).join('');
-                      navigator.clipboard.writeText(sequence).then(() => {
-                        console.log('Sequence copied to clipboard:', sequence);
-                      }).catch(err => {
-                        console.error('Failed to copy to clipboard:', err);
-                        // Fallback method for older browsers
-                        const textArea = document.createElement('textarea');
-                        textArea.value = sequence;
-                        document.body.appendChild(textArea);
-                        textArea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textArea);
-                      });
+                      navigator.clipboard.writeText(sequence);
                     }
                   }
                 }}
                 disabled={!highlightStart || !highlightEnd}
-                className="w-full px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
               >
-                Copy Sequence
+                Copy
               </button>
+              {highlightStart && highlightEnd && parsedData && (() => {
+                const startPos = parseInt(highlightStart) - 1;
+                const endPos = parseInt(highlightEnd) - 1;
+                if (!isNaN(startPos) && !isNaN(endPos) && startPos >= 0 && endPos < parsedData.baseCalls.length && startPos <= endPos) {
+                  return (
+                    <span className="text-sm text-yellow-700">
+                      ({endPos - startPos + 1} bases)
+                    </span>
+                  );
+                }
+              })()}
             </div>
           </div>
-          {highlightStart && highlightEnd && parsedData && (
-            <div className="mt-2 p-2 bg-white rounded border">
-              <p className="text-xs text-gray-600 mb-1">
-                Selected sequence ({highlightEnd - highlightStart + 1} bases):
-              </p>
-              <p className="text-xs font-mono text-gray-800 break-all">
-                {(() => {
-                  const startPos = parseInt(highlightStart) - 1;  // Convert to 0-based
-                  const endPos = parseInt(highlightEnd) - 1;      // Convert to 0-based  
-                  if (!isNaN(startPos) && !isNaN(endPos) && startPos >= 0 && endPos < parsedData.baseCalls.length && startPos <= endPos) {
-                    return parsedData.baseCalls.slice(startPos, endPos + 1).join('');
-                  }
-                  return 'Invalid range';
-                })()}
-              </p>
-            </div>
-          )}
         </div>
+
 
 
         <canvas
@@ -1476,7 +1440,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
         {/* Click instruction */}
         <div className="mt-2 text-center">
           <p className="text-xs text-gray-500">
-            Single-click to select a position • Double-click to navigate to that region
+            Single-click to select a position &bull; Double-click to navigate to that region
           </p>
         </div>
 
@@ -1528,78 +1492,6 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
           </div>
         </div>
 
-        {/* Sequence Info */}
-        <div className="mt-4 p-3 bg-gray-50 rounded">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-            <div>
-              <span className="font-medium text-gray-700">File:</span>
-              <p className="text-gray-900 font-mono">{fileName}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Format:</span>
-              <p className="text-gray-900">
-                <span className={`px-2 py-1 text-xs rounded font-mono ${parsedData?.fileFormat === 'AB1' ? 'bg-blue-100 text-blue-800' :
-                  parsedData?.fileFormat === 'SCF' ? 'bg-green-100 text-green-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                  {parsedData?.fileFormat || 'Unknown'}
-                </span>
-              </p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Length:</span>
-              <p className="text-gray-900">{parsedData?.sequenceLength} bp</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Avg Quality:</span>
-              <p className="text-gray-900">
-                {parsedData?.quality ?
-                  (parsedData.quality.reduce((a, b) => a + b, 0) / parsedData.quality.length).toFixed(1)
-                  : 'N/A'}
-              </p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">
-                {selectedPosition !== null ? 'Selected:' : 'High Quality:'}
-              </span>
-              <p className="text-gray-900">
-                {selectedPosition !== null ?
-                  `${selectedNucleotide}${selectedPosition + 1}` :
-                  parsedData?.quality ?
-                    `${parsedData.quality.filter(q => q >= qualityThreshold).length}/${parsedData.quality.length}`
-                    : 'N/A'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div className="mt-4 p-3 bg-blue-50 rounded">
-          <h5 className="text-sm font-medium text-blue-900 mb-2">Legend:</h5>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <span>Adenine (A)</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-red-500 rounded"></div>
-              <span>Thymine (T)</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-black rounded"></div>
-              <span>Guanine (G)</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-blue-500 rounded"></div>
-              <span>Cytosine (C)</span>
-            </div>
-          </div>
-          <p className="text-xs text-blue-700 mt-2">
-            Use the scroll bar below the chromatogram to navigate through the sequence.
-            Click anywhere on the chromatogram to select and highlight specific nucleotide positions.
-            Position markers are shown at the bottom for reference. Use the quality slider to filter low-quality bases.
-          </p>
-        </div>
       </div>
     </div>
   );
