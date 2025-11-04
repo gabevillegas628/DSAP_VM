@@ -96,14 +96,13 @@ const StudentClones = ({
                   <Star className="w-3 h-3 text-blue-600" />
                 </div>
                 <div className="text-sm">
-                  <span className="font-medium text-blue-800">Keep up the great work!</span>
-                  <span className="text-blue-700 ml-2">
-                    Achieve 100% scores on all practice clones to unlock additional clones to work on.
+                  <span className="text-blue-700">
+                    Complete and submit all practice clones for instructor review to unlock more clones.
                   </span>
                 </div>
               </div>
               <div className="mt-2 text-xs text-blue-600">
-                Progress: {qualification.perfectScoresCount}/{qualification.activeClonesCount} practice clones with perfect scores
+                {qualification.perfectScoresCount}/{qualification.activeClonesCount} practice clones approved
               </div>
             </div>
           )}
@@ -220,24 +219,6 @@ const StudentClones = ({
                       <p className="font-medium mb-1">Practice Clones Available</p>
                       <p className="text-blue-700">
                         Complete these practice exercises to familiarize yourself with DNA sequence analysis before working on your research assignments.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {assignedFiles.length > 0 && (
-                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <svg className="w-5 h-5 text-green-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="text-sm text-green-800">
-                      <p className="font-medium mb-1">Research Assignments Active</p>
-                      <p className="text-green-700">
-                        You have {assignedFiles.length} research clone{assignedFiles.length === 1 ? '' : 's'} assigned to you. Download the .ab1 files and begin your analysis using the recommended software.
                       </p>
                     </div>
                   </div>

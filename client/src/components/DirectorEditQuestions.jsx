@@ -244,6 +244,16 @@ const DirectorEditQuestions = () => {
   // Group management state
   const [managingGroupsForStep, setManagingGroupsForStep] = useState(null);
 
+  // Bulk conditional logic state
+  const [bulkConditionalStep, setBulkConditionalStep] = useState(null);
+  const [bulkSelectedQuestions, setBulkSelectedQuestions] = useState(new Set());
+  const [bulkConditionalLogic, setBulkConditionalLogic] = useState(null);
+
+  // Modal dragging state
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
   // Fetch analysis questions from API
   useEffect(() => {
     fetchAnalysisQuestions();
@@ -593,6 +603,99 @@ const DirectorEditQuestions = () => {
     setDraggedQuestion(null);
     setDragOverQuestion(null);
     setDropPosition(null);
+  };
+
+  // Modal dragging handlers
+  const handleMouseDown = (e) => {
+    if (e.target.closest('.modal-close-button') || e.target.closest('select') || e.target.closest('input')) {
+      return; // Don't start drag if clicking close button or form elements
+    }
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - modalPosition.x,
+      y: e.clientY - modalPosition.y
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    setModalPosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Reset modal position when opening
+  useEffect(() => {
+    if (bulkConditionalStep) {
+      setModalPosition({ x: 0, y: 0 });
+    }
+  }, [bulkConditionalStep]);
+
+  // Bulk conditional logic functions
+  const applyBulkConditionalLogic = async () => {
+    if (bulkSelectedQuestions.size === 0) {
+      alert('Please select at least one question');
+      return;
+    }
+
+    if (!bulkConditionalLogic?.showIf?.questionId || !bulkConditionalLogic?.showIf?.answer) {
+      alert('Please configure the conditional logic');
+      return;
+    }
+
+    try {
+      // Update all selected questions
+      await Promise.all(
+        Array.from(bulkSelectedQuestions).map(questionId => {
+          const question = analysisQuestions.find(q => q.id === questionId);
+          return apiService.put(`/analysis-questions/${questionId}`, {
+            ...question,
+            conditionalLogic: bulkConditionalLogic
+          });
+        })
+      );
+
+      // Refresh questions list
+      await fetchAnalysisQuestions();
+
+      // Close modal and reset state
+      setBulkConditionalStep(null);
+      setBulkSelectedQuestions(new Set());
+      setBulkConditionalLogic(null);
+
+      alert(`Successfully applied conditional logic to ${bulkSelectedQuestions.size} question(s)`);
+    } catch (error) {
+      console.error('Error applying bulk conditional logic:', error);
+      alert('Failed to apply conditional logic. Please try again.');
+    }
+  };
+
+  const toggleBulkQuestionSelection = (questionId) => {
+    setBulkSelectedQuestions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(questionId)) {
+        newSet.delete(questionId);
+      } else {
+        newSet.add(questionId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllBulkQuestions = () => {
+    const stepQuestions = analysisQuestions
+      .filter(q => q.step === bulkConditionalStep)
+      .map(q => q.id);
+    setBulkSelectedQuestions(new Set(stepQuestions));
+  };
+
+  const deselectAllBulkQuestions = () => {
+    setBulkSelectedQuestions(new Set());
   };
 
   // Group management functions
@@ -1176,13 +1279,26 @@ const DirectorEditQuestions = () => {
                       {step.replace('-', ' ')} Questions
                     </h4>
                     {stepQuestions.length > 0 && (
-                      <button
-                        onClick={() => setManagingGroupsForStep(step)}
-                        className="text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg transition duration-200 flex items-center gap-2"
-                      >
-                        <GripVertical className="w-4 h-4" />
-                        Manage Groups
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setBulkConditionalStep(step);
+                            setBulkSelectedQuestions(new Set());
+                            setBulkConditionalLogic(null);
+                          }}
+                          className="text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1.5 rounded-lg transition duration-200 flex items-center gap-2"
+                        >
+                          <AlertCircle className="w-4 h-4" />
+                          Bulk Conditional Logic
+                        </button>
+                        <button
+                          onClick={() => setManagingGroupsForStep(step)}
+                          className="text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg transition duration-200 flex items-center gap-2"
+                        >
+                          <GripVertical className="w-4 h-4" />
+                          Manage Groups
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="p-4">
@@ -1238,7 +1354,6 @@ const DirectorEditQuestions = () => {
                                           Conditional
                                         </span>
                                       )}
-                                      <span className="text-xs text-gray-500">Order: {question.order}</span>
                                     </div>
                                   </div>
                                   <div className="flex space-x-2 ml-4">
@@ -1772,6 +1887,216 @@ const DirectorEditQuestions = () => {
               >
                 Done
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Conditional Logic Modal */}
+      {bulkConditionalStep && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[95vh] overflow-hidden flex flex-col"
+            style={{
+              transform: `translate(${modalPosition.x}px, ${modalPosition.y}px)`,
+              cursor: isDragging ? 'grabbing' : 'default'
+            }}
+          >
+            <div
+              className="py-3 px-4 border-b border-gray-200 cursor-grab active:cursor-grabbing select-none"
+              onMouseDown={handleMouseDown}
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <GripVertical className="w-4 h-4 text-gray-400" />
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">
+                      Apply Conditional Logic - {bulkConditionalStep.replace('-', ' ').charAt(0).toUpperCase() + bulkConditionalStep.replace('-', ' ').slice(1)} Step
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setBulkConditionalStep(null);
+                    setBulkSelectedQuestions(new Set());
+                    setBulkConditionalLogic(null);
+                  }}
+                  className="modal-close-button text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1">
+              {/* Selection Controls */}
+              <div className="mb-3 flex items-center justify-between bg-gray-50 p-2 rounded-lg">
+                <div className="text-xs text-gray-700">
+                  <span className="font-semibold">{bulkSelectedQuestions.size}</span> question(s) selected
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={selectAllBulkQuestions}
+                    className="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-2 py-1 rounded transition"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={deselectAllBulkQuestions}
+                    className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded transition"
+                  >
+                    Deselect All
+                  </button>
+                </div>
+              </div>
+
+              {/* Question List */}
+              <div className="mb-3 space-y-1.5 max-h-[500px] overflow-y-auto border border-gray-200 rounded-lg p-2">
+                {analysisQuestions
+                  .filter(q => q.step === bulkConditionalStep)
+                  .sort((a, b) => {
+                    // Sort by group order first (treat null/undefined as 999)
+                    const aGroupOrder = a.groupOrder || 999;
+                    const bGroupOrder = b.groupOrder || 999;
+                    if (aGroupOrder !== bGroupOrder) {
+                      return aGroupOrder - bGroupOrder;
+                    }
+                    // Then sort by question order within the group
+                    return a.order - b.order;
+                  })
+                  .map(question => (
+                    <label
+                      key={question.id}
+                      className={`flex items-start p-2 rounded cursor-pointer transition ${
+                        bulkSelectedQuestions.has(question.id)
+                          ? 'bg-yellow-50 border-2 border-yellow-300'
+                          : 'bg-white border-2 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedQuestions.has(question.id)}
+                        onChange={() => toggleBulkQuestionSelection(question.id)}
+                        className="mt-0.5 h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded flex-shrink-0"
+                      />
+                      <div className="ml-2 flex-1">
+                        <div
+                          className="text-sm text-gray-900 font-medium"
+                          dangerouslySetInnerHTML={{ __html: question.text }}
+                        />
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                            {question.type}
+                          </span>
+                          {question.conditionalLogic && (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                              Already has condition
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+              </div>
+
+              {/* Conditional Logic Configuration */}
+              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3">
+                <h4 className="font-semibold text-gray-900 mb-2 text-sm">Configure Conditional Logic</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Show questions when this question...
+                    </label>
+                    <select
+                      value={bulkConditionalLogic?.showIf?.questionId || ''}
+                      onChange={(e) => setBulkConditionalLogic({
+                        showIf: {
+                          questionId: e.target.value,
+                          answer: bulkConditionalLogic?.showIf?.answer || ''
+                        }
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    >
+                      <option value="">Select a question...</option>
+                      {analysisQuestions
+                        .sort((a, b) => {
+                          // Sort by step first, then by group order, then by question order
+                          const stepOrder = { 'clone-editing': 1, 'blast': 2, 'analysis-submission': 3, 'review': 4 };
+                          if (stepOrder[a.step] !== stepOrder[b.step]) {
+                            return stepOrder[a.step] - stepOrder[b.step];
+                          }
+                          const aGroupOrder = a.groupOrder || 999;
+                          const bGroupOrder = b.groupOrder || 999;
+                          if (aGroupOrder !== bGroupOrder) {
+                            return aGroupOrder - bGroupOrder;
+                          }
+                          return a.order - b.order;
+                        })
+                        .map(q => (
+                          <option key={q.id} value={q.id}>
+                            [{q.step.replace('-', ' ')}] {q.text.length > 50 ? `${q.text.substring(0, 50)}...` : q.text}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      ...has this answer
+                    </label>
+                    <input
+                      type="text"
+                      value={bulkConditionalLogic?.showIf?.answer || ''}
+                      onChange={(e) => setBulkConditionalLogic({
+                        showIf: {
+                          questionId: bulkConditionalLogic?.showIf?.questionId || '',
+                          answer: e.target.value
+                        }
+                      })}
+                      placeholder="e.g., yes, no, specific option"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                    />
+                  </div>
+                </div>
+
+                {bulkConditionalLogic?.showIf?.questionId && bulkConditionalLogic?.showIf?.answer && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+                    ✓ Configured: will show when answer is "{bulkConditionalLogic.showIf.answer}"
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="py-3 px-4 border-t border-gray-200 flex justify-between items-center bg-gray-50">
+              <div className="text-sm text-gray-600">
+                {bulkSelectedQuestions.size > 0 && bulkConditionalLogic?.showIf?.questionId && bulkConditionalLogic?.showIf?.answer ? (
+                  <span className="text-green-700 font-medium">Ready to apply</span>
+                ) : (
+                  <span>Select questions and configure logic to continue</span>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setBulkConditionalStep(null);
+                    setBulkSelectedQuestions(new Set());
+                    setBulkConditionalLogic(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={applyBulkConditionalLogic}
+                  disabled={bulkSelectedQuestions.size === 0 || !bulkConditionalLogic?.showIf?.questionId || !bulkConditionalLogic?.showIf?.answer}
+                  className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition duration-200 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Apply to {bulkSelectedQuestions.size} Question{bulkSelectedQuestions.size !== 1 ? 's' : ''}
+                </button>
+              </div>
             </div>
           </div>
         </div>
