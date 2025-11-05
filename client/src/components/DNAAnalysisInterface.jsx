@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FileText, ChevronDown, XCircle, CheckCircle, AlertCircle, Save, Eye, AlertTriangle, X, BarChart3, MessageCircle, Clock, RefreshCw, User, Dna, HelpCircle } from 'lucide-react';
 import MessageModal from './MessageModal';
 import ChromatogramViewer from './ChromatogramViewer';
+import DraggableChromogramModal from './DraggableChromogramModal';
 import ORFTranslator from './ORFTranslator';
 import apiService from '../services/apiService';
 import {
@@ -1273,9 +1274,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
       setShowChromatogram(false);
     } else {
       // Opening chromatogram viewer
-
       setShowChromatogram(true);
-
       // Only load data if we don't have it yet
       if (!chromatogramData && !loadingChromatogram) {
         await loadChromatogramData();
@@ -1738,8 +1737,8 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
           {/* First BLAST Results Table */}
           <div>
             <h5 className="font-medium text-gray-700 mb-3">
-  {question.options?.table1Title || blast1Question?.text?.substring(0, 50) || 'BLAST Results 1'}
-</h5>
+              {question.options?.table1Title || blast1Question?.text?.substring(0, 50) || 'BLAST Results 1'}
+            </h5>
             {!blast1Answer ? (
               <div className="text-sm text-gray-500 italic bg-gray-50 p-3 rounded">
                 Results will appear here once you complete the previous BLAST question.
@@ -2270,7 +2269,8 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                 onToggle={() => setShowFeedbackPanel(false)}
               />
 
-              {/* Chromatogram Viewer */}
+              {/* Chromatogram Viewer Section - DISABLED FOR NOW */}
+              {/*
               {showChromatogram && (
                 <div className="mb-6">
                   {loadingChromatogram ? (
@@ -2311,6 +2311,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                   )}
                 </div>
               )}
+              */}
 
               <div className="mb-6">
                 <h4 className="text-lg font-semibold text-gray-900 mb-2">
@@ -2718,6 +2719,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
         initialSubject={messageModalPrepopulatedSubject}
       />
 
+      {/* Submit Confirmation Modal */}
       <SubmitConfirmationModal
         isOpen={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
@@ -2727,10 +2729,19 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
         isSubmitting={saving}
       />
 
+      {/* ORF Translator Modal */}
       <ORFTranslator
         isOpen={showORFTranslator}
         onClose={() => setShowORFTranslator(false)}
         initialSequence=""
+      />
+
+      {/* Draggable Chromatogram Modal */}
+      <DraggableChromogramModal
+        isOpen={showChromatogram}
+        onClose={() => setShowChromatogram(false)}
+        chromatogramData={chromatogramData}
+        loading={loadingChromatogram}
       />
     </div>
     </>
