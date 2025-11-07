@@ -419,6 +419,8 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
   const [hasUnreadFeedback, setHasUnreadFeedback] = useState(false);
   const [reviewComments, setReviewComments] = useState([]);
   const [showORFTranslator, setShowORFTranslator] = useState(false);
+  const [minimizedModals, setMinimizedModals] = useState([]);
+  const [focusedModal, setFocusedModal] = useState('chromatogram');
   const [messageModalPrepopulatedContent, setMessageModalPrepopulatedContent] = useState('');
   const [messageModalPrepopulatedSubject, setMessageModalPrepopulatedSubject] = useState('');
   const [stepHelp, setStepHelp] = useState({});
@@ -429,7 +431,45 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
   const [highlightPositions, setHighlightPositions] = useState([]);
   const [currentSequenceQuestionId, setCurrentSequenceQuestionId] = useState(null);
 
+  // Handlers for minimized modal stacking
+  const handleMinimizeChromatogram = () => {
+    setMinimizedModals(prev => {
+      if (!prev.includes('chromatogram')) {
+        return [...prev, 'chromatogram'];
+      }
+      return prev;
+    });
+  };
 
+  const handleRestoreChromatogram = () => {
+    setMinimizedModals(prev => prev.filter(id => id !== 'chromatogram'));
+  };
+
+  const handleMinimizeORF = () => {
+    setMinimizedModals(prev => {
+      if (!prev.includes('orf')) {
+        return [...prev, 'orf'];
+      }
+      return prev;
+    });
+  };
+
+  const handleRestoreORF = () => {
+    setMinimizedModals(prev => prev.filter(id => id !== 'orf'));
+  };
+
+  // Handlers for modal focus (z-index management)
+  const handleFocusChromatogram = () => {
+    setFocusedModal('chromatogram');
+  };
+
+  const handleFocusORF = () => {
+    setFocusedModal('orf');
+  };
+
+  // Calculate z-index based on focus
+  const chromatogramZIndex = focusedModal === 'chromatogram' ? 50 : 40;
+  const orfZIndex = focusedModal === 'orf' ? 50 : 40;
 
   const steps = [
     { id: 'clone-editing', name: 'Clone Editing', description: 'Quality check and sequence preparation' },
@@ -2734,6 +2774,11 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
         isOpen={showORFTranslator}
         onClose={() => setShowORFTranslator(false)}
         initialSequence=""
+        onMinimize={handleMinimizeORF}
+        onRestore={handleRestoreORF}
+        minimizedStackIndex={minimizedModals.indexOf('orf')}
+        onFocus={handleFocusORF}
+        zIndex={orfZIndex}
       />
 
       {/* Draggable Chromatogram Modal */}
@@ -2742,6 +2787,11 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
         onClose={() => setShowChromatogram(false)}
         chromatogramData={chromatogramData}
         loading={loadingChromatogram}
+        onMinimize={handleMinimizeChromatogram}
+        onRestore={handleRestoreChromatogram}
+        minimizedStackIndex={minimizedModals.indexOf('chromatogram')}
+        onFocus={handleFocusChromatogram}
+        zIndex={chromatogramZIndex}
       />
     </div>
     </>

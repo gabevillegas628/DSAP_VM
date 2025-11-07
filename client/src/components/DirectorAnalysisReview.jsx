@@ -2029,7 +2029,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
   return (
     <>
-      <div className="h-[75vh] bg-gray-50 flex overflow-hidden border border-gray-200 rounded-lg shadow-sm">
+      <div className="h-[95vh] bg-gray-50 flex overflow-hidden border border-gray-200 rounded-lg shadow-sm">
         {/* Collapsible Sidebar */}
         <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} bg-white border-r border-gray-200 transition-all duration-300 flex-shrink-0 flex flex-col overflow-hidden`}>
           {/* Sidebar Header with Collapse Toggle */}
@@ -2391,7 +2391,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                           className={`border-2 rounded-lg shadow-md overflow-hidden ${
                             isMarkedCorrect ? 'border-green-500 bg-green-50' :
                             isMarkedIncorrect ? 'border-red-400 bg-red-50' :
-                            isUnanswered ? 'border-gray-300 bg-gray-100' :
+                            isUnanswered ? 'border-orange-400 bg-gray-200' :
                             'border-gray-300 bg-white'
                             }`}
                         >
@@ -2399,7 +2399,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                           <div className={`p-3 border-b ${
                             isMarkedCorrect ? 'bg-green-100 border-green-200' :
                             isMarkedIncorrect ? 'bg-red-100 border-red-200' :
-                            isUnanswered ? 'bg-gray-200 border-gray-300' :
+                            isUnanswered ? 'bg-gray-300 border-gray-300' :
                             'bg-gray-100 border-gray-200'
                           }`}>
                             <div className="flex items-center justify-between">

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Copy, Download, AlertCircle, CheckCircle, RotateCw, X, Dna } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Copy, Download, AlertCircle, CheckCircle, RotateCw, X, Dna, Minus } from 'lucide-react';
 
 // Standard genetic code table
 const GENETIC_CODE = {
@@ -31,7 +31,7 @@ const AMINO_ACID_NAMES = {
   '*': 'Stop codon'
 };
 
-const ORFTranslator = ({ isOpen, onClose, initialSequence = '' }) => {
+const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRestore, minimizedStackIndex = 0, onFocus, zIndex = 50 }) => {
   const [dnaSequence, setDnaSequence] = useState(initialSequence);
   const [selectedFrame, setSelectedFrame] = useState(1);
   const [translations, setTranslations] = useState({});
@@ -39,6 +39,15 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '' }) => {
   const [showCodonView, setShowCodonView] = useState(false);
   const [selectedRange, setSelectedRange] = useState(null);
   const [cleanDnaSequence, setCleanDnaSequence] = useState('');
+
+  // Dragging and positioning state
+  const [position, setPosition] = useState({ x: 100, y: 100 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [savedPosition, setSavedPosition] = useState(null);
+  const [animatingMinimize, setAnimatingMinimize] = useState(false);
+  const modalRef = useRef(null);
 
   useEffect(() => {
     if (dnaSequence) {
@@ -65,6 +74,112 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '' }) => {
       document.removeEventListener('selectionchange', handleDocumentSelection);
     };
   }, [translations, selectedFrame]); // Added selectedFrame dependency // Changed from currentTranslation to translations
+
+  // Initialize position on first open (centered)
+  useEffect(() => {
+    if (isOpen && modalRef.current && !isMinimized) {
+      const modalWidth = modalRef.current.offsetWidth;
+      const modalHeight = modalRef.current.offsetHeight;
+      const centerX = (window.innerWidth - modalWidth) / 2;
+      const centerY = Math.max(50, (window.innerHeight - modalHeight) / 2);
+
+      setPosition({ x: centerX, y: centerY });
+    }
+  }, [isOpen, isMinimized]);
+
+  // Drag handlers
+  const handleMouseDown = useCallback((e) => {
+    if (e.target.closest('.drag-handle')) {
+      setIsDragging(true);
+      setDragOffset({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y
+      });
+    }
+  }, [position]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isDragging || !modalRef.current) return;
+
+    e.preventDefault();
+
+    const modalWidth = modalRef.current.offsetWidth;
+    const modalHeight = modalRef.current.offsetHeight;
+
+    let newX = e.clientX - dragOffset.x;
+    let newY = e.clientY - dragOffset.y;
+
+    const minX = -modalWidth + 100;
+    const maxX = window.innerWidth - 100;
+    const minY = 0;
+    const maxY = window.innerHeight - 60;
+
+    newX = Math.max(minX, Math.min(maxX, newX));
+    newY = Math.max(minY, Math.min(maxY, newY));
+
+    setPosition({ x: newX, y: newY });
+  }, [isDragging, dragOffset]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Minimize/restore handlers
+  const handleMinimize = useCallback(() => {
+    setSavedPosition(position);
+    setAnimatingMinimize(true);
+
+    // Wait for animation to complete before actually minimizing
+    setTimeout(() => {
+      setIsMinimized(true);
+      setAnimatingMinimize(false);
+      if (onMinimize) {
+        onMinimize();
+      }
+    }, 200);
+  }, [position, onMinimize]);
+
+  const handleRestore = useCallback(() => {
+    setIsMinimized(false);
+
+    if (savedPosition) {
+      setPosition(savedPosition);
+    }
+    if (onRestore) {
+      onRestore();
+    }
+  }, [savedPosition, onRestore]);
+
+  // Set up event listeners for dragging
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  // Handle window resize - reposition if off-screen
+  useEffect(() => {
+    const handleResize = () => {
+      if (!modalRef.current) return;
+
+      const modalWidth = modalRef.current.offsetWidth;
+      const maxX = window.innerWidth - 100;
+
+      setPosition(prev => ({
+        x: Math.min(prev.x, maxX),
+        y: Math.min(prev.y, window.innerHeight - 60)
+      }));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const validateDNASequence = (sequence) => {
     const cleanSequence = sequence.replace(/\s/g, '').toUpperCase();
@@ -288,25 +403,78 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '' }) => {
   const orfs = currentTranslation ? findORFs(currentTranslation.protein) : [];
 
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">Open Reading Frame Translator</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Translate DNA sequences to proteins using the standard genetic code
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
+    <div
+      className="fixed inset-0 pointer-events-none"
+      style={{ display: isOpen ? 'block' : 'none', zIndex }}
+    >
+      {isMinimized ? (
+        // Minimized view - compact pill in bottom-right corner
+        <div
+          className="absolute right-6 pointer-events-auto"
+          style={{ bottom: `${24 + (minimizedStackIndex * 72)}px` }}
+        >
+          <button
+            onClick={handleRestore}
+            className="flex items-center space-x-3 bg-indigo-600 text-white px-4 py-3 rounded-full shadow-lg hover:bg-indigo-700 transition-all duration-200 hover:shadow-xl transform hover:scale-105 w-64"
+          >
+            <Dna className="w-5 h-5 flex-shrink-0" />
+            <span className="font-medium truncate">ORF Translator</span>
+          </button>
         </div>
+      ) : (
+        // Full modal view
+        <div
+          ref={modalRef}
+          className={`absolute bg-white rounded-lg shadow-2xl pointer-events-auto flex flex-col ${animatingMinimize ? 'transition-all duration-200 ease-in-out' : ''}`}
+          style={{
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            width: '85vw',
+            maxWidth: '1500px',
+            maxHeight: '90vh',
+            transform: (() => {
+              if (animatingMinimize) {
+                // Calculate translation to pill position (bottom-right corner)
+                const pillX = window.innerWidth - 24 - 128; // right-6 (24px) + half pill width (128px)
+                const pillY = window.innerHeight - (24 + (minimizedStackIndex * 72)) - 24; // bottom position + half pill height
+                const translateX = pillX - position.x - (modalRef.current?.offsetWidth || 900) / 2;
+                const translateY = pillY - position.y - (modalRef.current?.offsetHeight || 500) / 2;
+                return `translate(${translateX}px, ${translateY}px) scale(0.8)`;
+              }
+              return 'scale(1)';
+            })(),
+            opacity: animatingMinimize ? 0 : 1
+          }}
+          onMouseDown={handleMouseDown}
+          onClick={onFocus}
+        >
+          {/* Header */}
+          <div className={`drag-handle p-4 bg-indigo-600 rounded-t-lg ${
+            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Dna className="w-5 h-5 text-white" />
+                <h3 className="text-lg font-bold text-white">Open Reading Frame Translator</h3>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleMinimize}
+                  className="text-white hover:text-gray-200 transition-colors p-1 rounded hover:bg-white/20"
+                  title="Minimize"
+                >
+                  <Minus className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={onClose}
+                  className="text-white hover:text-gray-200 transition-colors p-1 rounded hover:bg-white/20"
+                  title="Close"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+          </div>
 
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-100px)]">
           {/* Input Section */}
@@ -621,7 +789,8 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '' }) => {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 };

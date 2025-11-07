@@ -922,7 +922,7 @@ const LoginScreen = ({ onLogin }) => {
                                     Contact Support
                                 </button>
                             )}
-                            <span>© 2025 Rutgers University</span>
+                            <span>© 2025 Wildtype Technologies, LLC</span>
                             <span>•</span>
                             <span>DSAP v0.9(β)</span>
                         </div>
