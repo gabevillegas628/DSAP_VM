@@ -308,8 +308,6 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
   };
 
   const addQuestionComment = (questionId, comment) => {
-    if (!comment.trim()) return;
-
     setReviewData(prev => {
       const existingComment = prev.comments.find(c => c.questionId === questionId);
       const filteredComments = prev.comments.filter(c => c.questionId !== questionId);
@@ -320,7 +318,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
           ...filteredComments,
           {
             questionId,
-            feedback: comment.trim(),
+            feedback: comment,
             feedbackVisible: existingComment?.feedbackVisible ?? true,
             correctAnswer: existingComment?.correctAnswer ?? '',
             isCorrect: existingComment?.isCorrect ?? null,
@@ -464,13 +462,20 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
 
     setSaving(true);
     try {
+      // Trim feedback and correctAnswer fields before saving
+      const trimmedComments = reviewData.comments.map(comment => ({
+        ...comment,
+        feedback: comment.feedback?.trim() || '',
+        correctAnswer: comment.correctAnswer?.trim() || ''
+      }));
+
       if (submission.type === 'practice') {
         // For practice clones, save to UserPracticeProgress
         await apiService.put(`/practice-clones/${cloneId}/progress/${studentId}`, {
           progress: submission.progress,
           answers: submission.answers,
           currentStep: submission.currentStep,
-          reviewComments: reviewData.comments,
+          reviewComments: trimmedComments,
           reviewScore: reviewData.score,
           lastReviewed: new Date().toISOString()
         });
@@ -479,7 +484,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
         // Regular clone logic (existing)
         const updatedAnalysisData = {
           ...JSON.parse(submission.analysisData || '{}'),
-          reviewComments: reviewData.comments,
+          reviewComments: trimmedComments,
           reviewScore: reviewData.score,
           lastReviewed: new Date().toISOString()
         };
@@ -488,7 +493,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
           progress: submission.progress,
           answers: submission.answers,
           currentStep: submission.currentStep,
-          reviewComments: reviewData.comments,
+          reviewComments: trimmedComments,
           reviewScore: reviewData.score,
           lastReviewed: new Date().toISOString(),
           analysisData: JSON.stringify(updatedAnalysisData)
@@ -570,7 +575,7 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="p-6 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between">

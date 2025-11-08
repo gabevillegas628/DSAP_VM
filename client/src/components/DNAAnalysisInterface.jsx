@@ -1657,9 +1657,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                         comment.isCorrect === false ? 'text-red-800' :
                           'text-blue-800'
                         }`}>
-                        {comment.isCorrect === true ? 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Correct' :
-                          comment.isCorrect === false ? 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Needs Improvement' :
-                            'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¹ Instructor Feedback'}
+                        {comment.isCorrect === true ? 'Correct' :
+                          comment.isCorrect === false ? 'Needs Improvement' :
+                            'Instructor Feedback'}
                       </span>
                     </div>
 
