@@ -4,15 +4,18 @@ import {
   X,
   Eye,
   CheckCircle,
+  XCircle,
   ChevronDown,
   ChevronRight,
   Save,
   Clock,
   User,
-  FileText
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 
 import apiService from '../services/apiService';
+import DraggableChromogramModal from './DraggableChromogramModal';
 
 const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = 'regular', studentId }) => {
   const [loading, setLoading] = useState(false);
@@ -25,7 +28,11 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
   });
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [expandedAnswers, setExpandedAnswers] = useState(new Set());
+  const [expandedDirectorNotes, setExpandedDirectorNotes] = useState(new Set());
   const [saving, setSaving] = useState(false);
+  const [showChromatogram, setShowChromatogram] = useState(false);
+  const [chromatogramData, setChromatogramData] = useState(null);
+  const [loadingChromatogram, setLoadingChromatogram] = useState(false);
 
 
 
@@ -147,27 +154,45 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     }
   };
 
-  const getQuestionText = (questionId) => {
-    const question = analysisQuestions.find(q => q.id === questionId);
-    return question ? question.text : 'Question not found';
+  // Check if a question should be shown based on conditional logic
+  const shouldShowQuestion = (question, answers) => {
+    if (!question.conditionalLogic) return true;
+
+    const { showIf } = question.conditionalLogic;
+    if (!showIf) return true;
+
+    const dependentAnswer = answers[showIf.questionId];
+
+    // Check if the answer matches the required value
+    if (dependentAnswer !== showIf.answer) {
+      return false;
+    }
+
+    // Recursively check if the dependent question should also be shown (cascading conditionals)
+    const dependentQuestion = analysisQuestions.find(q => q.id === showIf.questionId);
+    if (dependentQuestion) {
+      return shouldShowQuestion(dependentQuestion, answers);
+    }
+
+    return true;
   };
 
   const getSectionsWithAnswers = (answers) => {
     const sectionsWithAnswers = new Set();
     analysisQuestions.forEach(question => {
-      if (answers[question.id] !== undefined && answers[question.id] !== '') {
+      // Show section if question is conditionally visible, even if not answered
+      if (shouldShowQuestion(question, answers)) {
         sectionsWithAnswers.add(question.step);
       }
     });
     const reversedSectionsWithAnswers = new Set(Array.from(sectionsWithAnswers).reverse());
     return reversedSectionsWithAnswers;
-    //return sectionsWithAnswers;
   };
 
   const getQuestionsForSection = (sectionId, answers) => {
     return analysisQuestions
       .filter(q => q.step === sectionId)
-      .filter(q => answers[q.id] !== undefined && answers[q.id] !== '')
+      .filter(q => shouldShowQuestion(q, answers))  // Apply conditional logic
       .sort((a, b) => {
         // First sort by groupOrder (treating null/undefined as 0)
         const aGroupOrder = a.groupOrder || 0;
@@ -192,45 +217,140 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     setExpandedSections(newExpanded);
   };
 
+  const toggleDirectorNotes = (questionId) => {
+    const newExpanded = new Set(expandedDirectorNotes);
+    if (newExpanded.has(questionId)) {
+      newExpanded.delete(questionId);
+    } else {
+      newExpanded.add(questionId);
+    }
+    setExpandedDirectorNotes(newExpanded);
+  };
+
+  // Helper to get comment data for a specific question
+  const getQuestionCommentData = (questionId) => {
+    return reviewData.comments.find(c => c.questionId === questionId) || {
+      feedback: '',
+      feedbackVisible: true,
+      correctAnswer: '',
+      isCorrect: null
+    };
+  };
+
+  // Update feedback visibility for a question
+  const updateFeedbackVisibility = (questionId, visible) => {
+    setReviewData(prev => {
+      const existingComment = prev.comments.find(c => c.questionId === questionId);
+
+      if (existingComment) {
+        // Update existing comment
+        return {
+          ...prev,
+          comments: prev.comments.map(c =>
+            c.questionId === questionId
+              ? { ...c, feedbackVisible: visible }
+              : c
+          )
+        };
+      } else {
+        // Create new comment structure with just visibility setting
+        return {
+          ...prev,
+          comments: [
+            ...prev.comments,
+            {
+              questionId,
+              feedback: '',
+              feedbackVisible: visible,
+              correctAnswer: '',
+              isCorrect: null,
+              timestamp: new Date().toISOString()
+            }
+          ]
+        };
+      }
+    });
+  };
+
+  // Update director reference notes for a question
+  const updateCorrectAnswer = (questionId, correctAnswer) => {
+    setReviewData(prev => {
+      const existingComment = prev.comments.find(c => c.questionId === questionId);
+
+      if (existingComment) {
+        // Update existing comment
+        return {
+          ...prev,
+          comments: prev.comments.map(c =>
+            c.questionId === questionId
+              ? { ...c, correctAnswer }
+              : c
+          )
+        };
+      } else {
+        // Create new comment structure with just correctAnswer
+        return {
+          ...prev,
+          comments: [
+            ...prev.comments,
+            {
+              questionId,
+              feedback: '',
+              feedbackVisible: true,
+              correctAnswer,
+              isCorrect: null,
+              timestamp: new Date().toISOString()
+            }
+          ]
+        };
+      }
+    });
+  };
 
   const addQuestionComment = (questionId, comment) => {
     if (!comment.trim()) return;
 
-    const newComment = {
-      id: Date.now(),
-      questionId: questionId,
-      feedback: comment.trim(),  // renamed from "comment"
-      feedbackVisible: true,  // NEW - default to visible
-      correctAnswer: '',  // NEW - empty by default
-      isCorrect: null,  // NEW - not marked correct/incorrect yet
-      timestamp: new Date().toISOString()
-    };
+    setReviewData(prev => {
+      const existingComment = prev.comments.find(c => c.questionId === questionId);
+      const filteredComments = prev.comments.filter(c => c.questionId !== questionId);
 
-    setReviewData(prev => ({
-      ...prev,
-      comments: [...prev.comments, newComment]
-    }));
+      return {
+        ...prev,
+        comments: [
+          ...filteredComments,
+          {
+            questionId,
+            feedback: comment.trim(),
+            feedbackVisible: existingComment?.feedbackVisible ?? true,
+            correctAnswer: existingComment?.correctAnswer ?? '',
+            isCorrect: existingComment?.isCorrect ?? null,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
+    });
   };
 
-  const markQuestionAsCorrect = (questionId) => {
-    const correctComment = {
-      id: Date.now(),
-      questionId: questionId,
-      feedback: '',  // No feedback text for correct answers
-      feedbackVisible: true,
-      correctAnswer: '',
-      isCorrect: true,  // NEW - proper boolean instead of type: 'correct'
-      timestamp: new Date().toISOString()
-    };
+  const markQuestionCorrectness = (questionId, isCorrect) => {
+    setReviewData(prev => {
+      const existingComment = prev.comments.find(c => c.questionId === questionId);
+      const filteredComments = prev.comments.filter(c => c.questionId !== questionId);
 
-    // Remove any existing comments for this question, then add correct comment
-    setReviewData(prev => ({
-      ...prev,
-      comments: [
-        ...prev.comments.filter(c => c.questionId !== questionId),
-        correctComment
-      ]
-    }));
+      return {
+        ...prev,
+        comments: [
+          ...filteredComments,
+          {
+            questionId,
+            feedback: existingComment?.feedback ?? '',
+            feedbackVisible: existingComment?.feedbackVisible ?? true,
+            correctAnswer: existingComment?.correctAnswer ?? '',
+            isCorrect,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
+    });
   };
 
   const renderBlastAnswerRows = (answer) => {
@@ -387,6 +507,56 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     }
   };
 
+  const loadChromatogramData = async () => {
+    if (!submission || chromatogramData || loadingChromatogram) return;
+
+    setLoadingChromatogram(true);
+
+    try {
+      let downloadEndpoint;
+
+      if (submission.type === 'practice') {
+        downloadEndpoint = `/practice-clones/${submission.id}/download`;
+      } else {
+        // Regular clones
+        downloadEndpoint = `/uploaded-files/${submission.id}/download`;
+      }
+
+      console.log('Loading chromatogram from:', downloadEndpoint);
+
+      // Use apiService.downloadBlob for blob downloads
+      const blob = await apiService.downloadBlob(downloadEndpoint);
+
+      if (blob.size === 0) {
+        console.warn('Downloaded file is empty, using mock data');
+        setChromatogramData('mock');
+        setShowChromatogram(true);
+        return;
+      }
+
+      const arrayBuffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      console.log('Chromatogram data loaded, size:', uint8Array.length);
+
+      if (uint8Array.length > 0) {
+        setChromatogramData(uint8Array);
+        setShowChromatogram(true);
+        console.log('Successfully loaded chromatogram data');
+      } else {
+        setChromatogramData('mock');
+        setShowChromatogram(true);
+      }
+
+    } catch (error) {
+      console.error('Error loading chromatogram data:', error);
+      // Use mock data as fallback
+      setChromatogramData('mock');
+      setShowChromatogram(true);
+    } finally {
+      setLoadingChromatogram(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const sectionsWithAnswers = submission ? getSectionsWithAnswers(submission.answers) : new Set();
@@ -415,12 +585,33 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
                 </p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center space-x-2">
+              {submission && (
+                <button
+                  onClick={loadChromatogramData}
+                  disabled={loadingChromatogram}
+                  className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:bg-purple-400 transition-colors flex items-center space-x-2"
+                >
+                  {loadingChromatogram ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                      <span>Loading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-4 h-4" />
+                      <span>View Chromatogram</span>
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Quick Info Bar */}
@@ -506,14 +697,30 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
                           <div className="p-4 space-y-4 border-t border-gray-200">
                             {questions.map((question, index) => {
                               const answer = submission.answers[question.id];
-                              const questionComments = reviewData.comments.filter(c => c.questionId === question.id);
-                              const isMarkedCorrect = questionComments.some(c => c.isCorrect === true);
+                              const commentData = getQuestionCommentData(question.id);
+                              const isMarkedCorrect = commentData.isCorrect === true;
+                              const isMarkedIncorrect = commentData.isCorrect === false;
+                              const isUnanswered = !answer || answer === '' || (typeof answer === 'object' && Object.keys(answer).length === 0);
+
+                              // Determine background and border colors based on status
+                              let bgClass = 'bg-gray-50';
+                              let borderClass = 'border-gray-200';
+
+                              if (isUnanswered) {
+                                bgClass = 'bg-gray-200';
+                                borderClass = 'border-orange-400';
+                              } else if (isMarkedCorrect) {
+                                bgClass = 'bg-green-100';
+                                borderClass = 'border-green-200';
+                              } else if (isMarkedIncorrect) {
+                                bgClass = 'bg-red-100';
+                                borderClass = 'border-red-200';
+                              }
 
                               return (
                                 <div
                                   key={question.id}
-                                  className={`border rounded-lg p-4 ${isMarkedCorrect ? 'border-green-400 bg-green-50' : 'border-gray-200'
-                                    }`}
+                                  className={`border rounded-lg p-4 ${bgClass} ${borderClass}`}
                                 >
                                   {/* Question Header */}
                                   <div className="flex items-start justify-between mb-3">
@@ -524,70 +731,118 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
                                       {isMarkedCorrect && (
                                         <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
                                       )}
-                                      <p className="font-medium text-sm text-gray-900">
-                                        {getQuestionText(question.id)}
-                                      </p>
+                                      {isMarkedIncorrect && (
+                                        <XCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                                      )}
+                                      <p className="font-medium text-sm text-gray-900"
+                                         dangerouslySetInnerHTML={{ __html: question.text }} />
                                     </div>
-                                    <button
-                                      onClick={() => markQuestionAsCorrect(question.id)}
-                                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors flex items-center space-x-1 flex-shrink-0"
-                                    >
-                                      <CheckCircle className="w-3 h-3" />
-                                      <span>Mark Correct</span>
-                                    </button>
+
+                                    {/* Toggle Button Group for Correct/Incorrect */}
+                                    <div className="flex items-center space-x-1 flex-shrink-0">
+                                      <button
+                                        onClick={() => markQuestionCorrectness(question.id, true)}
+                                        className={`px-2 py-1 text-xs rounded-l border transition-colors flex items-center space-x-1 ${
+                                          isMarkedCorrect
+                                            ? 'bg-green-600 text-white border-green-600'
+                                            : 'bg-white text-green-600 border-green-600 hover:bg-green-50'
+                                        }`}
+                                      >
+                                        <CheckCircle className="w-3 h-3" />
+                                        <span>Correct</span>
+                                      </button>
+                                      <button
+                                        onClick={() => markQuestionCorrectness(question.id, false)}
+                                        className={`px-2 py-1 text-xs rounded-r border transition-colors flex items-center space-x-1 ${
+                                          isMarkedIncorrect
+                                            ? 'bg-red-600 text-white border-red-600'
+                                            : 'bg-white text-red-600 border-red-600 hover:bg-red-50'
+                                        }`}
+                                      >
+                                        <XCircle className="w-3 h-3" />
+                                        <span>Incorrect</span>
+                                      </button>
+                                    </div>
                                   </div>
 
-                                  {/* Answer Display */}
-                                  <div className="mb-3">
-                                    {renderAnswerContent(question, answer)}
-                                  </div>
-
-                                  {/* Existing Comments */}
-                                  {questionComments.length > 0 && (
-                                    <div className="mb-3 space-y-1">
-                                      {questionComments.map(comment => (
-                                        <div
-                                          key={comment.id}
-                                          className={`text-xs px-2 py-1 rounded ${comment.isCorrect === true
-                                              ? 'bg-green-100 text-green-800'
-                                              : comment.isCorrect === false
-                                                ? 'bg-red-100 text-red-800'
-                                                : 'bg-blue-100 text-blue-800'
-                                            }`}
-                                        >
-                                          {comment.isCorrect === true ? '✓ Correct' :
-                                            comment.isCorrect === false ? '✗ Needs Improvement' :
-                                              comment.feedback}
-                                        </div>
-                                      ))}
+                                  {/* Unanswered Question Alert */}
+                                  {isUnanswered && (
+                                    <div className="mb-3 bg-orange-50 border-l-4 border-orange-400 p-2 rounded flex items-center space-x-2">
+                                      <AlertCircle className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                                      <span className="text-xs text-orange-800 font-medium">Required Question Not Answered</span>
                                     </div>
                                   )}
 
-                                  {/* Add Comment Input */}
-                                  <div className="flex space-x-2">
-                                    <input
-                                      type="text"
-                                      placeholder="Add feedback comment..."
-                                      className="flex-1 text-sm border border-gray-300 rounded px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                      onKeyPress={(e) => {
-                                        if (e.key === 'Enter' && e.target.value.trim()) {
-                                          addQuestionComment(question.id, e.target.value);
-                                          e.target.value = '';
-                                        }
-                                      }}
+                                  {/* Answer Display */}
+                                  {!isUnanswered && (
+                                    <div className="mb-3">
+                                      {renderAnswerContent(question, answer)}
+                                    </div>
+                                  )}
+
+                                  {/* Feedback Section */}
+                                  <div className="mb-3 space-y-2">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="flex items-center space-x-2">
+                                        <label className="text-xs font-medium text-gray-700">
+                                          Feedback for Student
+                                        </label>
+                                        <div className="flex items-center space-x-1">
+                                          <input
+                                            type="checkbox"
+                                            id={`visible-${question.id}`}
+                                            checked={commentData.feedbackVisible}
+                                            onChange={(e) => updateFeedbackVisibility(question.id, e.target.checked)}
+                                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-3 h-3"
+                                          />
+                                          <label htmlFor={`visible-${question.id}`} className="text-xs text-gray-600">
+                                            Visible
+                                          </label>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <textarea
+                                      value={commentData.feedback}
+                                      onChange={(e) => addQuestionComment(question.id, e.target.value)}
+                                      placeholder="Add feedback for student..."
+                                      className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                                      rows="2"
                                     />
+                                  </div>
+
+                                  {/* Director Reference Notes */}
+                                  <div className="mb-2">
                                     <button
-                                      onClick={(e) => {
-                                        const input = e.target.parentElement.querySelector('input');
-                                        if (input.value.trim()) {
-                                          addQuestionComment(question.id, input.value);
-                                          input.value = '';
-                                        }
-                                      }}
-                                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                      onClick={() => toggleDirectorNotes(question.id)}
+                                      className="flex items-center space-x-2 text-xs font-medium text-gray-700 hover:text-gray-900 mb-1"
                                     >
-                                      Add
+                                      {expandedDirectorNotes.has(question.id) ? (
+                                        <ChevronDown className="w-3 h-3" />
+                                      ) : (
+                                        <ChevronRight className="w-3 h-3" />
+                                      )}
+                                      <Eye className="w-3 h-3" />
+                                      <span>Director Reference</span>
+                                      {commentData.correctAnswer && (
+                                        <span className="text-gray-500 italic">(has notes)</span>
+                                      )}
                                     </button>
+
+                                    {expandedDirectorNotes.has(question.id) && (
+                                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
+                                        <p className="text-xs text-yellow-800 mb-1 italic">
+                                          These notes are only visible to directors and will not be shown to students.
+                                        </p>
+                                        <textarea
+                                          value={commentData.correctAnswer}
+                                          onChange={(e) => updateCorrectAnswer(question.id, e.target.value)}
+                                          placeholder="Add reference notes, correct answer, grading criteria..."
+                                          className="w-full text-sm border border-yellow-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-500 resize-none bg-white"
+                                          rows="2"
+                                        />
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -658,6 +913,16 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
           </div>
         )}
       </div>
+
+      {/* Chromatogram Modal */}
+      <DraggableChromogramModal
+        isOpen={showChromatogram}
+        onClose={() => setShowChromatogram(false)}
+        chromatogramData={chromatogramData}
+        loading={loadingChromatogram}
+        fileName={submission?.originalName || submission?.filename}
+        fileType={submission?.type}
+      />
     </div>
   );
 };

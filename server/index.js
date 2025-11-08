@@ -2498,6 +2498,90 @@ app.delete('/api/uploaded-files/:id', async (req, res) => {
   }
 });
 
+// Replace ab1 file for an existing clone
+app.post('/api/uploaded-files/:id/replace', upload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Get the existing file record
+    const existingFile = await prisma.uploadedFile.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            school: { select: { name: true } }
+          }
+        },
+        uploadedBy: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    if (!existingFile) {
+      // Clean up the uploaded file since we're not using it
+      const uploadPath = path.join(__dirname, 'uploads', req.file.filename);
+      if (fs.existsSync(uploadPath)) {
+        fs.unlinkSync(uploadPath);
+      }
+      return res.status(404).json({ error: 'Clone not found' });
+    }
+
+    // Delete the old file from disk
+    const oldFilePath = path.join(__dirname, 'uploads', existingFile.filename);
+    if (fs.existsSync(oldFilePath)) {
+      fs.unlinkSync(oldFilePath);
+      console.log('Deleted old file:', existingFile.filename);
+    }
+
+    // Update the database record with the new file info
+    const updatedFile = await prisma.uploadedFile.update({
+      where: { id: parseInt(id) },
+      data: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        updatedAt: new Date()
+      },
+      include: {
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            school: { select: { name: true } }
+          }
+        },
+        uploadedBy: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    console.log(`File replaced successfully for clone ${existingFile.cloneName}`);
+    console.log(`Old file: ${existingFile.originalName}`);
+    console.log(`New file: ${req.file.originalname}`);
+
+    res.json(updatedFile);
+  } catch (error) {
+    console.error('Error replacing file:', error);
+    // Try to clean up the uploaded file on error
+    if (req.file) {
+      const uploadPath = path.join(__dirname, 'uploads', req.file.filename);
+      if (fs.existsSync(uploadPath)) {
+        fs.unlinkSync(uploadPath);
+      }
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // =========================
 // Student Progress API endpoints
 // =========================

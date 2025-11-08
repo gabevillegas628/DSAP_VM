@@ -378,8 +378,20 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
 
   const findORFs = (protein) => {
     const orfs = [];
-    let currentORF = null;
 
+    // Check for ORF from position 1 (index 0) to first stop codon
+    const firstStopIndex = protein.indexOf('*');
+    if (firstStopIndex !== -1 && firstStopIndex + 1 >= 10) {
+      orfs.push({
+        start: 0,
+        end: firstStopIndex,
+        sequence: protein.slice(0, firstStopIndex + 1),
+        length: firstStopIndex + 1
+      });
+    }
+
+    // Find all M-to-* ORFs
+    let currentORF = null;
     for (let i = 0; i < protein.length; i++) {
       if (protein[i] === 'M' && !currentORF) {
         currentORF = { start: i, sequence: 'M' };
@@ -388,13 +400,22 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
         if (protein[i] === '*') {
           currentORF.end = i;
           currentORF.length = currentORF.sequence.length;
-          orfs.push(currentORF);
+
+          if (currentORF.length >= 10) {
+            // Check if this is different from any ORF we already added
+            const isDuplicate = orfs.some(orf =>
+              orf.start === currentORF.start && orf.end === currentORF.end
+            );
+            if (!isDuplicate) {
+              orfs.push(currentORF);
+            }
+          }
           currentORF = null;
         }
       }
     }
 
-    return orfs.filter(orf => orf.length >= 10); // Only show ORFs with 10+ amino acids
+    return orfs;
   };
 
   if (!isOpen) return null;
@@ -429,9 +450,12 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
           style={{
             left: `${position.x}px`,
             top: `${position.y}px`,
-            width: '85vw',
-            maxWidth: '1500px',
+            width: '60vw',
+            minWidth: '600px',
+            maxWidth: '1200px',
             maxHeight: '90vh',
+            resize: 'both',
+            overflow: 'auto',
             transform: (() => {
               if (animatingMinimize) {
                 // Calculate translation to pill position (bottom-right corner)
@@ -621,63 +645,15 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
                 const correspondingDNA = getCorrespondingDNA();
                 return correspondingDNA ? (
                   <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                    <h5 className="font-medium text-blue-900 mb-2">
+                    <h5 className="font-medium text-blue-900 mb-3">
                       Corresponding DNA Sequence
                     </h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-3">
-                      <div>
-                        <span className="text-blue-700 font-medium">Selected amino acids:</span>
-                        <span className="ml-2 font-mono text-blue-800">{selectedRange.selectedText}</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-700 font-medium">DNA position:</span>
-                        <span className="ml-2 text-blue-800">
-                          {correspondingDNA.position.start} - {correspondingDNA.position.end}
-                        </span>
-                      </div>
+                    <div className="font-mono p-3 bg-white border border-blue-200 rounded text-gray-800 break-all">
+                      <span className="text-blue-600 font-semibold">[{correspondingDNA.position.start}]</span>
+                      <span className="mx-2">{correspondingDNA.sequence}</span>
+                      <span className="text-blue-600 font-semibold">[{correspondingDNA.position.end}]</span>
                     </div>
-                    <div className="font-mono p-3 bg-white border border-blue-200 rounded">
-                      {(() => {
-                        const dnaSeq = correspondingDNA.sequence;
-                        const lines = [];
-                        
-                        // Split DNA into lines of 60 characters (20 codons per line)
-                        for (let i = 0; i < dnaSeq.length; i += 60) {
-                          lines.push(dnaSeq.slice(i, i + 60));
-                        }
-                        
-                        return lines.map((line, lineIndex) => (
-                          <div key={lineIndex} className="mb-2">
-                            <div className="flex">
-                              <span className="text-xs text-blue-500 w-12 flex-shrink-0 mr-2 mt-1 select-none">
-                                {correspondingDNA.position.start + (lineIndex * 60)}
-                              </span>
-                              <span className="text-lg tracking-wider">
-                                {line.split('').map((nucleotide, index) => (
-                                  <span
-                                    key={lineIndex * 60 + index}
-                                    className={`${
-                                      (lineIndex * 60 + index) % 3 === 0 ? 'border-l-2 border-blue-300 pl-0.5 ml-1' : ''
-                                    } ${
-                                      nucleotide === 'A' ? 'text-red-600' :
-                                      nucleotide === 'T' ? 'text-blue-600' :
-                                      nucleotide === 'G' ? 'text-green-600' :
-                                      'text-orange-600'
-                                    }`}
-                                  >
-                                    {nucleotide}
-                                  </span>
-                                ))}
-                              </span>
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                    <div className="mt-2 flex justify-between items-center">
-                      <div className="text-xs text-blue-600">
-                        Codons are separated by vertical lines • Position numbers show DNA coordinates
-                      </div>
+                    <div className="mt-2 flex justify-end">
                       <button
                         onClick={() => copyToClipboard(correspondingDNA.sequence)}
                         className="text-xs text-blue-600 hover:text-blue-800 flex items-center space-x-1"
@@ -697,30 +673,34 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
                     Open Reading Frames (≥10 amino acids)
                   </h5>
                   <div className="space-y-3">
-                    {orfs.map((orf, index) => (
-                      <div key={index} className="bg-green-50 border border-green-200 rounded p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-green-800">
-                            ORF {index + 1}: Position {orf.start + 1} - {orf.end + 1}
-                          </span>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-green-600">
-                              {orf.length} amino acids
+                    {orfs.map((orf, index) => {
+                      const dnaStart = selectedFrame + (orf.start * 3);
+                      const dnaEnd = selectedFrame + (orf.end * 3) + 2;
+                      return (
+                        <div key={index} className="bg-green-50 border border-green-200 rounded p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-green-800">
+                              ORF {index + 1}: Position {orf.start + 1} - {orf.end + 1} (DNA: {dnaStart}-{dnaEnd})
                             </span>
-                            <button
-                              onClick={() => copyToClipboard(orf.sequence)}
-                              className="p-1 text-green-600 hover:text-green-800"
-                              title="Copy ORF sequence"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-green-600">
+                                {orf.length} amino acids
+                              </span>
+                              <button
+                                onClick={() => copyToClipboard(orf.sequence)}
+                                className="p-1 text-green-600 hover:text-green-800"
+                                title="Copy ORF sequence"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="font-mono text-xs text-green-700 break-all">
+                            {orf.sequence}
                           </div>
                         </div>
-                        <div className="font-mono text-xs text-green-700 break-all">
-                          {orf.sequence}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

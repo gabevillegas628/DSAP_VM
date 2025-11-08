@@ -60,6 +60,20 @@ const DirectorCloneLibrary = () => {
   const [programSettings, setProgramSettings] = useState(null);
   const [ncbiSubmissionFiles, setNCBISubmissionFiles] = useState([]);
 
+  // NEW: File replacement state
+  const [showReplaceFileModal, setShowReplaceFileModal] = useState(false);
+  const [fileToReplace, setFileToReplace] = useState(null);
+  const [replacingFile, setReplacingFile] = useState(false);
+
+  // NEW: Unassign confirmation state
+  const [showUnassignModal, setShowUnassignModal] = useState(false);
+  const [fileToUnassign, setFileToUnassign] = useState(null);
+
+  // NEW: Assignment modal state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [fileToAssign, setFileToAssign] = useState(null);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+
   const checkMissingFiles = async () => {
     setLoadingMissingFiles(true);
 
@@ -545,6 +559,12 @@ const DirectorCloneLibrary = () => {
     }
   };
 
+  const openAssignModal = (file) => {
+    setFileToAssign(file);
+    setStudentSearchTerm('');
+    setShowAssignModal(true);
+  };
+
   const assignFile = async (fileId, studentId) => {
     try {
       const updatedFile = await apiService.put(`/uploaded-files/${fileId}/assign`,
@@ -553,21 +573,55 @@ const DirectorCloneLibrary = () => {
       setUploadedFiles(prev => prev.map(file =>
         file.id === fileId ? updatedFile : file
       ));
+      setShowAssignModal(false);
+      setFileToAssign(null);
+      setStudentSearchTerm('');
     } catch (error) {
       console.error('Error assigning file:', error);
+      alert('Failed to assign file: ' + error.message);
     }
   };
 
-  const unassignFile = async (fileId) => {
+  const getFilteredStudents = () => {
+    if (!studentSearchTerm.trim()) {
+      return students;
+    }
+
+    const term = studentSearchTerm.toLowerCase();
+    return students.filter(student =>
+      student.name.toLowerCase().includes(term) ||
+      student.email?.toLowerCase().includes(term) ||
+      student.school?.name?.toLowerCase().includes(term)
+    );
+  };
+
+  const unassignFile = (fileId) => {
+    // Find the file to get student info for confirmation
+    const file = uploadedFiles.find(f => f.id === fileId);
+
+    if (!file || !file.assignedTo) {
+      return;
+    }
+
+    setFileToUnassign(file);
+    setShowUnassignModal(true);
+  };
+
+  const confirmUnassign = async () => {
+    if (!fileToUnassign) return;
+
     try {
-      const updatedFile = await apiService.put(`/uploaded-files/${fileId}/assign`,
+      const updatedFile = await apiService.put(`/uploaded-files/${fileToUnassign.id}/assign`,
         { assignedToId: null }
       );
       setUploadedFiles(prev => prev.map(file =>
-        file.id === fileId ? updatedFile : file
+        file.id === fileToUnassign.id ? updatedFile : file
       ));
+      setShowUnassignModal(false);
+      setFileToUnassign(null);
     } catch (error) {
       console.error('Error unassigning file:', error);
+      alert('Failed to unassign file: ' + error.message);
     }
   };
 
@@ -657,6 +711,42 @@ const DirectorCloneLibrary = () => {
         console.error('Error deleting file:', error);
         alert(error.message || 'Failed to delete file');
       }
+    }
+  };
+
+  const replaceFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !fileToReplace) return;
+
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.ab1')) {
+      alert('Please select a valid .ab1 file');
+      return;
+    }
+
+    setReplacingFile(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const updatedFile = await apiService.uploadFiles(`/uploaded-files/${fileToReplace.id}/replace`, formData);
+
+      // Update the file in state
+      setUploadedFiles(prev => prev.map(f =>
+        f.id === fileToReplace.id ? updatedFile : f
+      ));
+
+      setShowReplaceFileModal(false);
+      setFileToReplace(null);
+      event.target.value = '';
+
+      alert('File replaced successfully!');
+    } catch (error) {
+      console.error('Error replacing file:', error);
+      alert(error.message || 'Failed to replace file');
+    } finally {
+      setReplacingFile(false);
     }
   };
 
@@ -1061,23 +1151,25 @@ const DirectorCloneLibrary = () => {
                                 Unassign
                               </button>
                             ) : (
-                              <select
-                                onChange={(e) => {
-                                  if (e.target.value) {
-                                    assignFile(file.id, parseInt(e.target.value));
-                                  }
-                                }}
-                                value=""
-                                className="text-sm border border-gray-300 rounded px-2 py-1"
+                              <button
+                                onClick={() => openAssignModal(file)}
+                                className="text-green-600 hover:text-green-800 text-sm"
                               >
-                                <option value="">Assign to...</option>
-                                {students.map(student => (
-                                  <option key={student.id} value={student.id}>
-                                    {student.name} - {student.school?.name}
-                                  </option>
-                                ))}
-                              </select>
+                                Assign
+                              </button>
                             )}
+
+                            {/* REPLACE FILE BUTTON */}
+                            <button
+                              onClick={() => {
+                                setFileToReplace(file);
+                                setShowReplaceFileModal(true);
+                              }}
+                              className="text-blue-600 hover:text-blue-800 text-sm"
+                              title="Replace ab1 file"
+                            >
+                              Replace
+                            </button>
 
                             {/* ENHANCED DELETE BUTTON */}
                             <button
@@ -1738,6 +1830,204 @@ const DirectorCloneLibrary = () => {
         defaultOrganism={programSettings?.organismName || ''}
         defaultLibraryName={programSettings?.libraryName || ''}
       />
+
+      {/* File Replacement Modal */}
+      {showReplaceFileModal && fileToReplace && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Replace AB1 File</h3>
+            </div>
+            <div className="p-6">
+              <div className="mb-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-blue-800 font-medium mb-2">Current Clone Info:</p>
+                  <div className="text-sm text-blue-900">
+                    <p><strong>Clone Name:</strong> {fileToReplace.cloneName}</p>
+                    <p><strong>Current File:</strong> {fileToReplace.originalName}</p>
+                    {fileToReplace.assignedTo && (
+                      <p><strong>Assigned to:</strong> {fileToReplace.assignedTo.name}</p>
+                    )}
+                  </div>
+                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select new .ab1 file
+                </label>
+                <input
+                  type="file"
+                  accept=".ab1"
+                  onChange={replaceFile}
+                  disabled={replacingFile}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
+                />
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="text-sm text-yellow-800">
+                  <p className="font-medium mb-2">Important:</p>
+                  <ul className="space-y-1">
+                    <li>• The new file will replace the current ab1 file</li>
+                    <li>• Clone metadata (name, assignment, status) will be preserved</li>
+                    <li>• Only .ab1 files are accepted</li>
+                    <li>• This action cannot be undone</li>
+                  </ul>
+                </div>
+              </div>
+              {replacingFile && (
+                <div className="text-center py-4">
+                  <p className="text-indigo-600">Replacing file...</p>
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowReplaceFileModal(false);
+                  setFileToReplace(null);
+                }}
+                disabled={replacingFile}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unassign Confirmation Modal */}
+      {showUnassignModal && fileToUnassign && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Confirm Unassignment</h3>
+            </div>
+            <div className="p-6">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                <div className="text-sm text-orange-900">
+                  <p className="font-medium mb-3">You are about to unassign:</p>
+                  <div className="space-y-2 mb-3">
+                    <p><strong>Clone:</strong> {fileToUnassign.cloneName}</p>
+                    <p><strong>Student:</strong> {fileToUnassign.assignedTo?.name}</p>
+                    <p><strong>School:</strong> {fileToUnassign.assignedTo?.school?.name || 'Unknown School'}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-medium mb-1">Warning:</p>
+                    <p>This will remove the clone from the student's assignments. They will no longer be able to access or work on this clone.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowUnassignModal(false);
+                  setFileToUnassign(null);
+                }}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmUnassign}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition duration-200"
+              >
+                Unassign Clone
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assignment Modal */}
+      {showAssignModal && fileToAssign && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Assign Clone to Student</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Clone: <span className="font-medium text-indigo-600">{fileToAssign.cloneName}</span>
+              </p>
+            </div>
+            <div className="p-6 flex-1 overflow-y-auto">
+              {/* Search Box */}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, or school..."
+                    value={studentSearchTerm}
+                    onChange={(e) => setStudentSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    autoFocus
+                  />
+                  {studentSearchTerm && (
+                    <button
+                      onClick={() => setStudentSearchTerm('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                  {getFilteredStudents().length} student{getFilteredStudents().length !== 1 ? 's' : ''} found
+                </p>
+              </div>
+
+              {/* Student List */}
+              <div className="space-y-2">
+                {getFilteredStudents().length > 0 ? (
+                  getFilteredStudents().map(student => (
+                    <button
+                      key={student.id}
+                      onClick={() => assignFile(fileToAssign.id, student.id)}
+                      className="w-full text-left p-4 border border-gray-200 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">{student.name}</p>
+                          <p className="text-sm text-gray-600">{student.email}</p>
+                          {student.school && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              <span className="font-medium">School:</span> {student.school.name}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-green-600">
+                          <Plus className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No students found matching "{studentSearchTerm}"</p>
+                    <p className="text-sm mt-2">Try a different search term</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setFileToAssign(null);
+                  setStudentSearchTerm('');
+                }}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

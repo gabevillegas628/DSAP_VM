@@ -31,7 +31,6 @@ const LoginScreen = ({ onLogin }) => {
         yearsInProgram: '',
         classesTaken: [],
         otherScienceCourses: '',
-        age: '',
         gender: '',
         ethnicity: '',
         location: '',
@@ -210,9 +209,6 @@ const LoginScreen = ({ onLogin }) => {
                 if (demographics.otherScienceCourses && demographics.otherScienceCourses.trim()) {
                     cleanedDemographics.otherScienceCourses = demographics.otherScienceCourses.trim();
                 }
-                if (demographics.age && demographics.age.trim()) {
-                    cleanedDemographics.age = demographics.age.trim();
-                }
                 if (demographics.gender && demographics.gender.trim()) {
                     cleanedDemographics.gender = demographics.gender.trim();
                 }
@@ -269,7 +265,6 @@ const LoginScreen = ({ onLogin }) => {
                         classesTaken: [],
                         otherScienceCourses: '',
                         ethnicity: '',
-                        age: '',
                         gender: '',
                         location: '',
                         country: ''
@@ -288,7 +283,6 @@ const LoginScreen = ({ onLogin }) => {
                     classesTaken: [],
                     otherScienceCourses: '',
                     ethnicity: '',
-                    age: '',
                     gender: '',
                     location: '',
                     country: ''
@@ -676,34 +670,20 @@ const LoginScreen = ({ onLogin }) => {
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Age</label>
-                                                        <input
-                                                            type="number"
-                                                            value={demographics.age}
-                                                            onChange={(e) => setDemographics(prev => ({ ...prev, age: e.target.value }))}
-                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
-                                                            placeholder="Age"
-                                                            min="1"
-                                                            max="120"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Gender</label>
-                                                        <select
-                                                            value={demographics.gender}
-                                                            onChange={(e) => setDemographics(prev => ({ ...prev, gender: e.target.value }))}
-                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
-                                                        >
-                                                            <option value="">Select...</option>
-                                                            <option value="Male">Male</option>
-                                                            <option value="Female">Female</option>
-                                                            <option value="Non-binary">Non-binary</option>
-                                                            <option value="Prefer not to say">Prefer not to say</option>
-                                                            <option value="Other">Other</option>
-                                                        </select>
-                                                    </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Gender</label>
+                                                    <select
+                                                        value={demographics.gender}
+                                                        onChange={(e) => setDemographics(prev => ({ ...prev, gender: e.target.value }))}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
+                                                    >
+                                                        <option value="">Select...</option>
+                                                        <option value="Male">Male</option>
+                                                        <option value="Female">Female</option>
+                                                        <option value="Non-binary">Non-binary</option>
+                                                        <option value="Prefer not to say">Prefer not to say</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
                                                 </div>
                                             </div>
 
@@ -735,6 +715,7 @@ const LoginScreen = ({ onLogin }) => {
                                                         <option value="white">White</option>
                                                         <option value="hispanic-latino">Hispanic or Latino</option>
                                                         <option value="other">Other</option>
+                                                        <option value="prefer-not-to-say">Prefer not to say</option>
                                                     </select>
                                                 </div>
 

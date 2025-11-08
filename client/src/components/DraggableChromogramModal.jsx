@@ -140,49 +140,52 @@ const DraggableChromogramModal = ({
       className="fixed inset-0 pointer-events-none"
       style={{ display: isOpen ? 'block' : 'none', zIndex }}
     >
-      {isMinimized ? (
-        // Minimized view - compact pill in bottom-right corner
-        <div
-          className="absolute right-6 pointer-events-auto"
-          style={{ bottom: `${24 + (minimizedStackIndex * 72)}px` }}
+      {/* Minimized view - compact pill in bottom-right corner */}
+      <div
+        className="absolute right-6 pointer-events-auto"
+        style={{
+          bottom: `${24 + (minimizedStackIndex * 72)}px`,
+          display: isMinimized ? 'block' : 'none'
+        }}
+      >
+        <button
+          onClick={handleRestore}
+          className="flex items-center space-x-3 bg-indigo-600 text-white px-4 py-3 rounded-full shadow-lg hover:bg-indigo-700 transition-all duration-200 hover:shadow-xl transform hover:scale-105 w-64"
         >
-          <button
-            onClick={handleRestore}
-            className="flex items-center space-x-3 bg-indigo-600 text-white px-4 py-3 rounded-full shadow-lg hover:bg-indigo-700 transition-all duration-200 hover:shadow-xl transform hover:scale-105 w-64"
-          >
-            <BarChart3 className="w-5 h-5 flex-shrink-0" />
-            <span className="font-medium truncate">
-              {fileName ? `Chromatogram: ${fileName}` : 'Chromatogram Viewer'}
-            </span>
-          </button>
-        </div>
-      ) : (
-        // Full modal view
-        <div
-          ref={modalRef}
-          className={`absolute bg-white rounded-lg shadow-2xl pointer-events-auto flex flex-col ${animatingMinimize ? 'transition-all duration-200 ease-in-out' : ''}`}
-          style={{
-            left: `${position.x}px`,
-            top: `${position.y}px`,
-            width: '80vw',
-            maxWidth: '1400px',
-            maxHeight: '85vh',
-            transform: (() => {
-              if (animatingMinimize) {
-                // Calculate translation to pill position (bottom-right corner)
-                const pillX = window.innerWidth - 24 - 128; // right-6 (24px) + half pill width (128px)
-                const pillY = window.innerHeight - (24 + (minimizedStackIndex * 72)) - 24; // bottom position + half pill height
-                const translateX = pillX - position.x - (modalRef.current?.offsetWidth || 800) / 2;
-                const translateY = pillY - position.y - (modalRef.current?.offsetHeight || 400) / 2;
-                return `translate(${translateX}px, ${translateY}px) scale(0.8)`;
-              }
-              return 'scale(1)';
-            })(),
-            opacity: animatingMinimize ? 0 : 1
-          }}
-          onMouseDown={handleMouseDown}
-          onClick={onFocus}
-        >
+          <BarChart3 className="w-5 h-5 flex-shrink-0" />
+          <span className="font-medium truncate">
+            {fileName ? `Chromatogram: ${fileName}` : 'Chromatogram Viewer'}
+          </span>
+        </button>
+      </div>
+
+      {/* Full modal view - Keep in DOM even when minimized to preserve state */}
+      <div
+        ref={modalRef}
+        className={`absolute bg-white rounded-lg shadow-2xl pointer-events-auto flex flex-col ${animatingMinimize ? 'transition-all duration-200 ease-in-out' : ''}`}
+        style={{
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          width: '80vw',
+          maxWidth: '1400px',
+          maxHeight: '85vh',
+          display: isMinimized && !animatingMinimize ? 'none' : 'flex',
+          transform: (() => {
+            if (animatingMinimize) {
+              // Calculate translation to pill position (bottom-right corner)
+              const pillX = window.innerWidth - 24 - 128; // right-6 (24px) + half pill width (128px)
+              const pillY = window.innerHeight - (24 + (minimizedStackIndex * 72)) - 24; // bottom position + half pill height
+              const translateX = pillX - position.x - (modalRef.current?.offsetWidth || 800) / 2;
+              const translateY = pillY - position.y - (modalRef.current?.offsetHeight || 400) / 2;
+              return `translate(${translateX}px, ${translateY}px) scale(0.8)`;
+            }
+            return 'scale(1)';
+          })(),
+          opacity: animatingMinimize ? 0 : 1
+        }}
+        onMouseDown={handleMouseDown}
+        onClick={onFocus}
+      >
         {/* Draggable Header */}
         <div
           className={`drag-handle bg-indigo-600 p-4 text-white rounded-t-lg ${
@@ -244,7 +247,6 @@ const DraggableChromogramModal = ({
           )}
         </div>
       </div>
-      )}
     </div>
   );
 };

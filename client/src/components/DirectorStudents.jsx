@@ -1,6 +1,6 @@
 // components/DirectorStudents.jsx - Enhanced with Filters and Perfect Score Styling
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { AlertCircle, ChevronDown, ChevronRight, Clock, CheckCircle, FileText, Eye, Search, ChevronLeft } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, Clock, CheckCircle, FileText, Eye, Search, ChevronLeft, X } from 'lucide-react';
 import CloneReviewModal from './CloneReviewModal';
 import apiService from '../services/apiService';
 
@@ -574,8 +574,17 @@ const DirectorStudents = () => {
                 placeholder="Search students, emails, schools, or instructors..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {/* School Filter */}

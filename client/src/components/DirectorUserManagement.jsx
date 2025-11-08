@@ -1,7 +1,16 @@
 // components/DirectorUserManagement.jsx - Updated to use apiService
 import React, { useState, useEffect, useMemo } from 'react';
-import { Edit, Trash2, Eye, EyeOff, Check, X, Clock, AlertCircle, Users, GraduationCap, Shield, History, Activity } from 'lucide-react';
+import { Edit, Trash2, Eye, EyeOff, Check, X, Clock, AlertCircle, Users, GraduationCap, Shield, History, Activity, Search } from 'lucide-react';
 import apiService from './apiService';
+
+// Debounce utility function
+const debounce = (func, delay) => {
+  let timeoutId;
+  return (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+};
 
 const DirectorUserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -22,6 +31,10 @@ const DirectorUserManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage, setUsersPerPage] = useState(20);
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
 
   const [newUser, setNewUser] = useState({
     email: '',
@@ -30,6 +43,18 @@ const DirectorUserManagement = () => {
     role: 'student',
     schoolId: ''
   });
+
+  // Debounced search effect
+  useEffect(() => {
+    const debouncedUpdate = debounce((query) => {
+      setDebouncedSearchQuery(query);
+      setCurrentPage(1); // Reset to first page when searching
+    }, 300);
+
+    debouncedUpdate(searchQuery);
+
+    return () => clearTimeout(debouncedUpdate);
+  }, [searchQuery]);
 
   // Fetch users and schools from API
   useEffect(() => {
@@ -254,9 +279,25 @@ const DirectorUserManagement = () => {
   const getSortedAndFilteredUsers = () => {
     let filteredUsers = users;
 
+    // Apply search filter
+    if (debouncedSearchQuery.trim()) {
+      const query = debouncedSearchQuery.toLowerCase().trim();
+      filteredUsers = filteredUsers.filter(user => {
+        const name = user.name?.toLowerCase() || '';
+        const email = user.email?.toLowerCase() || '';
+        const role = user.role?.toLowerCase() || '';
+        const school = user.school?.name?.toLowerCase() || '';
+
+        return name.includes(query) ||
+          email.includes(query) ||
+          role.includes(query) ||
+          school.includes(query);
+      });
+    }
+
     // Apply filter
     if (filter !== 'all') {
-      filteredUsers = users.filter(user => user.status === filter);
+      filteredUsers = filteredUsers.filter(user => user.status === filter);
     }
 
     // Apply sort
@@ -574,20 +615,48 @@ const DirectorUserManagement = () => {
   return (
     <>
       <div className="bg-white rounded-xl shadow-sm border">
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Manage all user accounts and access levels
-              {pendingCount > 0 && (
-                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                  <Clock className="w-3 h-3 mr-1" />
-                  {pendingCount} pending approval
-                </span>
-              )}
-            </p>
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Manage all user accounts and access levels
+                {pendingCount > 0 && (
+                  <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {pendingCount} pending approval
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="text-sm text-gray-600">
+              {sortedAndFilteredUsers.length} of {users.length} users
+            </div>
           </div>
-          <div className="flex items-center space-x-4">
+
+          {/* Search Bar and Filters */}
+          <div className="flex items-center gap-4">
+            {/* Search Bar */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search users by name, email, role, or school..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
             {/* Filter Dropdown */}
             <select
               value={filter}
@@ -602,7 +671,7 @@ const DirectorUserManagement = () => {
             {/* Add User Button */}
             <button
               onClick={() => setShowUserForm(true)}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-200"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-200 whitespace-nowrap"
             >
               + Add User
             </button>
