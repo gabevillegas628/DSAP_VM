@@ -397,7 +397,7 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
         currentORF = { start: i, sequence: 'M' };
       } else if (currentORF) {
         currentORF.sequence += protein[i];
-        if (protein[i] === '*') {
+        if (protein[i] === '*' || i === protein.length - 1) {
           currentORF.end = i;
           currentORF.length = currentORF.sequence.length;
 
