@@ -24,6 +24,8 @@ const ProfilePicture = ({
     lg: 'w-8 h-8', 
     xl: 'w-10 h-10'
   };
+  console.log('++++++++++++++++++++++ProfilePicture src:', src);
+
 
   // If there's no src or if image failed to load, show fallback
   if (!src || hasError) {
@@ -36,6 +38,7 @@ const ProfilePicture = ({
 
   return (
     <img
+      key={src} // Force component remount when src changes - breaks browser cache
       src={src}
       alt={`${name}'s profile`}
       className={`${sizeClasses[size]} rounded-full object-cover border border-gray-200 ${className}`}

@@ -1379,8 +1379,9 @@ const profilePictureUpload = multer({
     },
     filename: function (req, file, cb) {
       const userId = req.params.userId;
+      const timestamp = Date.now();
       const extension = file.originalname.split('.').pop();
-      const filename = `user-${userId}.${extension}`;
+      const filename = `user-${userId}-${timestamp}.${extension}`;
       cb(null, filename);
     }
   }),
@@ -1400,15 +1401,29 @@ const profilePictureUpload = multer({
 app.post('/api/users/:userId/profile-picture', profilePictureUpload.single('profilePicture'), async (req, res) => {
   try {
     const { userId } = req.params;
-
     if (!req.file) {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
 
-    // Create URL for the uploaded file
+    // Get the user's old profile picture for cleanup
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(userId) },
+      select: { profilePicture: true }
+    });
+
+    // Delete old profile picture file if it exists
+    if (user?.profilePicture) {
+      const oldFilename = path.basename(user.profilePicture.split('?')[0]); // Remove query params
+      const oldFilePath = path.join(__dirname, 'uploads', 'profile-pics', oldFilename);
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath);
+        console.log('Deleted old profile picture:', oldFilePath);
+      }
+    }
+
+    // Store the new filename (no need for query params anymore since filename is unique)
     const profilePictureUrl = `/uploads/profile-pics/${req.file.filename}`;
 
-    // Update user with new profile picture URL
     const updatedUser = await prisma.user.update({
       where: { id: parseInt(userId) },
       data: { profilePicture: profilePictureUrl },
