@@ -517,7 +517,13 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
   };
 
   const loadChromatogramData = async () => {
-    if (!submission || chromatogramData || loadingChromatogram) return;
+    if (!submission || loadingChromatogram) return;
+
+    // If chromatogram data is already loaded, just show it
+    if (chromatogramData) {
+      setShowChromatogram(true);
+      return;
+    }
 
     setLoadingChromatogram(true);
 
