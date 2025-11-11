@@ -1391,7 +1391,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
     });
   };
 
-  const submitReview = async (newStatus) => {
+  const submitReview = async (newStatus, overrideScore = null) => {
     if (!selectedSubmission) return;
 
     // Auto-add any pending feedback from input fields before submitting
@@ -1407,6 +1407,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
       console.log('Selected submission:', selectedSubmission);
       console.log('New status:', newStatus);
       console.log('Review data:', reviewData);
+      console.log('Override score:', overrideScore);
 
       const statusMap = {
         'approved': CLONE_STATUSES.REVIEWED_CORRECT,
@@ -1436,7 +1437,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
         const updateData = {
           status: statusMap[newStatus],
-          reviewScore: reviewData.score,
+          reviewScore: overrideScore !== null ? overrideScore : reviewData.score,
           reviewComments: allComments,
           lastReviewed: new Date().toISOString(),
           reviewedBy: 'Current Director'
@@ -1454,7 +1455,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
         const updatedAnalysisData = {
           ...currentAnalysisData,
-          reviewScore: reviewData.score,
+          reviewScore: overrideScore !== null ? overrideScore : reviewData.score,
           reviewComments: allComments,
           lastReviewed: new Date().toISOString(),
           reviewedBy: 'Current Director'
@@ -2279,7 +2280,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                     <button
                       onClick={() => {
                         setReviewData(prev => ({ ...prev, score: 100 }));
-                        submitReview('approved');
+                        submitReview('approved', 100);
                       }}
                       disabled={saving}
                       className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"

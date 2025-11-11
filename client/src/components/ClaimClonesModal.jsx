@@ -33,12 +33,13 @@ const ClaimClonesModal = ({ isOpen, onClose, currentUser, onCloneClaimed }) => {
         }
     };
 
-    
+
     useEffect(() => {
         if (isOpen && currentUser) {
             fetchUnassignedClones();
         }
-    }, [isOpen, currentUser, fetchUnassignedClones]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, currentUser]);
 
     const handleClaimClone = async (cloneId, cloneName) => {
         try {
