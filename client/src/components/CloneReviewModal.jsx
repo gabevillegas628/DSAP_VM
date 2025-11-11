@@ -139,6 +139,10 @@ const CloneReviewModal = ({ isOpen, onClose, cloneId, studentName, cloneType = '
     if (isOpen && cloneId) {
       fetchCloneData();
       fetchAnalysisQuestions();
+      // Reset chromatogram state when opening a new clone
+      setShowChromatogram(false);
+      setChromatogramData(null);
+      setLoadingChromatogram(false);
     }
   }, [isOpen, cloneId, fetchCloneData]);
 
