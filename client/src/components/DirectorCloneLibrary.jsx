@@ -74,6 +74,12 @@ const DirectorCloneLibrary = () => {
   const [fileToAssign, setFileToAssign] = useState(null);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
 
+  // NEW: Drag-and-drop replacement state
+  const [dragOverRowId, setDragOverRowId] = useState(null);
+  const [showDragReplaceModal, setShowDragReplaceModal] = useState(false);
+  const [draggedReplacementFile, setDraggedReplacementFile] = useState(null);
+  const [fileToReplaceViaDrag, setFileToReplaceViaDrag] = useState(null);
+
   const checkMissingFiles = async () => {
     setLoadingMissingFiles(true);
 
@@ -750,6 +756,90 @@ const DirectorCloneLibrary = () => {
     }
   };
 
+  // NEW: Drag-and-drop handlers for file replacement
+  const handleDragOver = (e, fileId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverRowId(fileId);
+  };
+
+  const handleDragEnter = (e, fileId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverRowId(fileId);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only clear if we're leaving the row entirely
+    if (e.currentTarget === e.target) {
+      setDragOverRowId(null);
+    }
+  };
+
+  const handleDrop = (e, file) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverRowId(null);
+
+    // Get the dropped file
+    const droppedFile = e.dataTransfer.files?.[0];
+
+    if (!droppedFile) {
+      return;
+    }
+
+    // Validate file type
+    if (!droppedFile.name.toLowerCase().endsWith('.ab1')) {
+      alert('Error: Only .ab1 files are allowed for clone replacement.');
+      return;
+    }
+
+    // Set the file and show confirmation modal
+    setDraggedReplacementFile(droppedFile);
+    setFileToReplaceViaDrag(file);
+    setShowDragReplaceModal(true);
+  };
+
+  const confirmDragReplace = async () => {
+    if (!draggedReplacementFile || !fileToReplaceViaDrag) return;
+
+    setReplacingFile(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', draggedReplacementFile);
+
+      const updatedFile = await apiService.uploadFiles(
+        `/uploaded-files/${fileToReplaceViaDrag.id}/replace`,
+        formData
+      );
+
+      // Update the file in state
+      setUploadedFiles(prev => prev.map(f =>
+        f.id === fileToReplaceViaDrag.id ? updatedFile : f
+      ));
+
+      setShowDragReplaceModal(false);
+      setDraggedReplacementFile(null);
+      setFileToReplaceViaDrag(null);
+
+      alert('File replaced successfully!');
+    } catch (error) {
+      console.error('Error replacing file via drag-drop:', error);
+      alert(error.message || 'Failed to replace file');
+    } finally {
+      setReplacingFile(false);
+    }
+  };
+
+  const cancelDragReplace = () => {
+    setShowDragReplaceModal(false);
+    setDraggedReplacementFile(null);
+    setFileToReplaceViaDrag(null);
+  };
+
   const filteredFiles = getFilteredFiles();
   const paginatedFiles = getPaginatedFiles();
   const totalPages = getTotalPages();
@@ -1076,7 +1166,18 @@ const DirectorCloneLibrary = () => {
                   </thead>
                   <tbody>
                     {paginatedFiles.map(file => (
-                      <tr key={file.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <tr
+                        key={file.id}
+                        className={`border-b border-gray-100 transition-colors ${
+                          dragOverRowId === file.id
+                            ? 'bg-blue-100 border-blue-300'
+                            : 'hover:bg-gray-50'
+                        }`}
+                        onDragOver={(e) => handleDragOver(e, file.id)}
+                        onDragEnter={(e) => handleDragEnter(e, file.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, file)}
+                      >
                         <td className="py-3 px-4">
                           {file.status === CLONE_STATUSES.TO_BE_SUBMITTED_NCBI && file.assignedTo && (
                             <input
@@ -2023,6 +2124,64 @@ const DirectorCloneLibrary = () => {
                 className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drag-and-Drop Replacement Confirmation Modal */}
+      {showDragReplaceModal && fileToReplaceViaDrag && draggedReplacementFile && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Confirm File Replacement</h3>
+            </div>
+            <div className="p-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-blue-800 font-medium mb-3">You are about to replace:</p>
+                <div className="text-sm text-blue-900 space-y-2">
+                  <p><strong>Clone Name:</strong> {fileToReplaceViaDrag.cloneName}</p>
+                  <p><strong>Current File:</strong> {fileToReplaceViaDrag.originalName}</p>
+                  <p><strong>New File:</strong> {draggedReplacementFile.name}</p>
+                  {fileToReplaceViaDrag.assignedTo && (
+                    <p><strong>Assigned to:</strong> {fileToReplaceViaDrag.assignedTo.name}</p>
+                  )}
+                </div>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-medium mb-1">Important:</p>
+                    <ul className="space-y-1">
+                      <li>• The new file will replace the current .ab1 file</li>
+                      <li>• Clone metadata (name, assignment, status) will be preserved</li>
+                      <li>• This action cannot be undone</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              {replacingFile && (
+                <div className="text-center py-4">
+                  <p className="text-indigo-600">Replacing file...</p>
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={cancelDragReplace}
+                disabled={replacingFile}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDragReplace}
+                disabled={replacingFile}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:opacity-50"
+              >
+                {replacingFile ? 'Replacing...' : 'Confirm Replacement'}
               </button>
             </div>
           </div>
