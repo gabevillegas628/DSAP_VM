@@ -215,8 +215,10 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
 
       // Check if we have real binary data or mock indicator
       if (data === 'mock' || !data || data.length < 100) {
-        console.log('Using mock data - no real file available');
-        parsedData = generateMockChromatogramData(fileName || 'unknown');
+        console.log('No real file data available');
+        setError('Could not load chromatogram data');
+        setLoading(false);
+        return;
       } else {
         console.log('Parsing real file data, size:', data.length, 'bytes');
         try {
@@ -232,8 +234,10 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
             throw new Error('Unsupported file format - not AB1 or SCF');
           }
         } catch (parseError) {
-          console.error('Failed to parse file data, falling back to mock:', parseError);
-          parsedData = generateMockChromatogramData(fileName || 'unknown');
+          console.error('Failed to parse file data:', parseError);
+          setError('Could not load chromatogram data');
+          setLoading(false);
+          return;
         }
       }
 
@@ -241,7 +245,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
       setLoading(false);
     } catch (err) {
       console.error('Error in parseChromatogramFile:', err);
-      setError('Failed to parse chromatogram file: ' + err.message);
+      setError('Could not load chromatogram data');
       setLoading(false);
     }
   };
@@ -687,71 +691,6 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
     };
   };
 
-  // Generate mock chromatogram data for demonstration
-  const generateMockChromatogramData = (fileName) => {
-    console.log('generateMockChromatogramData called with fileName:', fileName); // Debug log
-
-    const sequenceLength = 800;
-    const sequence = generateRandomSequence(sequenceLength);
-    const traces = {
-      A: [],
-      T: [],
-      G: [],
-      C: []
-    };
-    const quality = [];
-    const baseCalls = [];
-
-    for (let i = 0; i < sequenceLength * 4; i++) {
-      const x = i;
-      const baseIndex = Math.floor(i / 4);
-      const base = sequence[baseIndex] || 'N';
-      const noise = (Math.random() - 0.5) * 50;
-
-      // Generate realistic-looking peaks
-      traces.A[i] = generatePeak(x, baseIndex, base === 'A', 100) + noise;
-      traces.T[i] = generatePeak(x, baseIndex, base === 'T', 80) + noise;
-      traces.G[i] = generatePeak(x, baseIndex, base === 'G', 120) + noise;
-      traces.C[i] = generatePeak(x, baseIndex, base === 'C', 90) + noise;
-
-      if (i % 4 === 0) {
-        baseCalls.push(base);
-        quality.push(Math.max(10, Math.min(60, 40 + Math.random() * 20 - baseIndex * 0.05)));
-      }
-    }
-
-    // Apply smoothing to all traces (increased smoothing)
-    traces.A = smoothData(traces.A, 9);
-    traces.T = smoothData(traces.T, 9);
-    traces.G = smoothData(traces.G, 9);
-    traces.C = smoothData(traces.C, 9);
-
-    return {
-      sequence,
-      traces,
-      quality,
-      baseCalls,
-      fileName: fileName || 'unknown.ab1', // Add fallback
-      sequenceLength,
-      fileFormat: 'MOCK'
-    };
-  };
-
-  const generateRandomSequence = (length) => {
-    const bases = ['A', 'T', 'G', 'C'];
-    return Array.from({ length }, () => bases[Math.floor(Math.random() * bases.length)]).join('');
-  };
-
-  const generatePeak = (x, baseIndex, isPeak, maxHeight) => {
-    const peakCenter = baseIndex * 4 + 2;
-    const distance = Math.abs(x - peakCenter);
-    const width = 2;
-
-    if (isPeak && distance < width * 2) {
-      return maxHeight * Math.exp(-(distance * distance) / (2 * width * width));
-    }
-    return Math.random() * 15; // Background noise
-  };
 
   // Smoothing function to reduce noise (enhanced)
   const smoothData = (data, windowSize = 7) => {
@@ -1235,9 +1174,22 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
   if (error) {
     return (
       <div className="bg-white rounded-lg border p-6">
-        <div className="text-center">
-          <p className="text-red-600 mb-2">Error loading chromatogram:</p>
-          <p className="text-sm text-gray-600">{error}</p>
+        <div className="text-center py-8">
+          <div className="mb-6">
+            <svg className="w-16 h-16 mx-auto text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h3 className="text-2xl font-bold text-red-600 mb-2">Could not load Chromatogram Data</h3>
+            <p className="text-lg text-gray-700">Please contact a Director to fix this issue</p>
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Close
+            </button>
+          )}
         </div>
       </div>
     );
