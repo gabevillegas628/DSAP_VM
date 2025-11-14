@@ -818,6 +818,61 @@ app.post('/api/analysis-questions', async (req, res) => {
   }
 });
 
+// Rename question group endpoint - MUST come before /:id route
+app.put('/api/analysis-questions/rename-group', async (req, res) => {
+  try {
+    const { step, oldGroupName, newGroupName } = req.body;
+
+    // Validate inputs
+    if (!step || !oldGroupName || !newGroupName) {
+      return res.status(400).json({
+        error: 'step, oldGroupName, and newGroupName are required'
+      });
+    }
+
+    if (oldGroupName.trim() === newGroupName.trim()) {
+      return res.status(400).json({
+        error: 'New group name must be different from old group name'
+      });
+    }
+
+    // Check if a group with the new name already exists in this step
+    const existingGroup = await prisma.analysisQuestion.findFirst({
+      where: {
+        step,
+        questionGroup: newGroupName
+      }
+    });
+
+    if (existingGroup) {
+      return res.status(409).json({
+        error: `A group named "${newGroupName}" already exists in this step`
+      });
+    }
+
+    // Perform bulk update
+    const result = await prisma.analysisQuestion.updateMany({
+      where: {
+        step,
+        questionGroup: oldGroupName
+      },
+      data: {
+        questionGroup: newGroupName
+      }
+    });
+
+    console.log(`Renamed group "${oldGroupName}" to "${newGroupName}" in step "${step}". Updated ${result.count} questions.`);
+
+    res.json({
+      message: 'Group renamed successfully',
+      updatedCount: result.count
+    });
+  } catch (error) {
+    console.error('Error renaming question group:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.put('/api/analysis-questions/:id', async (req, res) => {
   try {
     const { id } = req.params;

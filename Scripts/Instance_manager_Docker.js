@@ -136,10 +136,26 @@ class InstanceManager {
 
             // Check if port is used by another instance
             const instances = this.getInstances();
+            const conflictingInstances = [];
             for (const inst of instances) {
                 const config = this.getInstanceConfig(inst);
                 if (config?.port === port) {
-                    console.log(`❌ Port ${port} is already assigned to instance: ${inst}`);
+                    conflictingInstances.push({
+                        name: inst,
+                        status: this.getInstanceStatus(inst)
+                    });
+                }
+            }
+
+            if (conflictingInstances.length > 0) {
+                console.log(`\n⚠️  Port ${port} is already assigned to:`);
+                conflictingInstances.forEach(inst => {
+                    console.log(`   - ${inst.name} (${inst.status})`);
+                });
+                console.log(`\n💡 Multiple instances can share a port, but only one can run at a time.`);
+                const proceed = await this.question('Continue with this port? (y/n): ');
+                if (proceed.toLowerCase() !== 'y') {
+                    console.log('Setup cancelled.');
                     return;
                 }
             }
@@ -1030,7 +1046,7 @@ createDirector();
         }
     }
 
-    async startInstance(instanceName, port) {
+    async startInstance(instanceName, port, autoApprove = false) {
         console.log('   🚀 Starting instance...');
 
         try {
@@ -1040,9 +1056,37 @@ createDirector();
             execSync('npm install -g pm2', { stdio: 'inherit' });
         }
 
+        // Check if another instance is already running on this port
+        const conflictingInstance = this.getRunningInstanceOnPort(port);
+        if (conflictingInstance && conflictingInstance !== instanceName) {
+            console.log(`\n⚠️  Warning: ${conflictingInstance} is already running on port ${port}`);
+
+            if (!autoApprove) {
+                const stopConflict = await this.question(`Stop ${conflictingInstance} and start ${instanceName} instead? (y/n): `);
+                if (stopConflict.toLowerCase() !== 'y') {
+                    throw new Error('Cannot start - port already in use');
+                }
+            }
+
+            console.log(`   🛑 Stopping ${conflictingInstance}...`);
+            try {
+                execSync(`pm2 stop ${conflictingInstance}`, { stdio: 'pipe' });
+                console.log(`   ✅ Stopped ${conflictingInstance}`);
+            } catch (error) {
+                console.log(`   ⚠️  Could not stop ${conflictingInstance}: ${error.message}`);
+            }
+        }
+
         const serverDir = path.join(this.instancesDir, instanceName, 'server');
 
         try {
+            // Delete from PM2 if it exists (to reload environment)
+            try {
+                execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+            } catch (e) {
+                // Instance might not exist in PM2, that's okay
+            }
+
             execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
             console.log(`   ✅ Instance started in PM2`);
@@ -1077,10 +1121,32 @@ createDirector();
             const result = execSync(`pm2 jlist`, { encoding: 'utf8' });
             const processes = JSON.parse(result);
             const process = processes.find(p => p.name === instanceName);
-            return process ? process.pm2_env.status : 'stopped';
+            return process ? process.pm2_env.status : 'not in PM2';
         } catch {
             return 'unknown';
         }
+    }
+
+    isInstanceInPM2(instanceName) {
+        try {
+            const result = execSync(`pm2 jlist`, { encoding: 'utf8' });
+            const processes = JSON.parse(result);
+            return processes.some(p => p.name === instanceName);
+        } catch {
+            return false;
+        }
+    }
+
+    getRunningInstanceOnPort(port) {
+        const instances = this.getInstances();
+        for (const inst of instances) {
+            const config = this.getInstanceConfig(inst);
+            const status = this.getInstanceStatus(inst);
+            if (config?.port === port && status === 'online') {
+                return inst;
+            }
+        }
+        return null;
     }
 
     async verifyInstanceHealth(instanceName, port, maxAttempts = 10) {
@@ -1150,6 +1216,25 @@ createDirector();
 
             console.log(`🔄 Restarting ${instanceName} (reloading environment)...`);
 
+            // Check if another instance is running on the same port
+            const conflictingInstance = this.getRunningInstanceOnPort(config.port);
+            if (conflictingInstance && conflictingInstance !== instanceName) {
+                console.log(`\n⚠️  Warning: ${conflictingInstance} is already running on port ${config.port}`);
+                const stopConflict = await this.question(`Stop ${conflictingInstance} and start ${instanceName} instead? (y/n): `);
+                if (stopConflict.toLowerCase() !== 'y') {
+                    console.log('Restart cancelled.');
+                    return;
+                }
+
+                console.log(`🛑 Stopping ${conflictingInstance}...`);
+                try {
+                    execSync(`pm2 stop ${conflictingInstance}`, { stdio: 'pipe' });
+                    console.log(`✅ Stopped ${conflictingInstance}`);
+                } catch (error) {
+                    console.log(`⚠️  Could not stop ${conflictingInstance}: ${error.message}`);
+                }
+            }
+
             // Delete and restart to reload environment variables (pm2 restart doesn't reload .env)
             try {
                 execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
@@ -1187,9 +1272,10 @@ createDirector();
 
     async deleteInstance(instanceName) {
         const config = this.getInstanceConfig(instanceName);
+        const status = this.getInstanceStatus(instanceName);
 
         console.log(`\n⚠️  WARNING: This will permanently delete:`);
-        console.log(`- Instance: ${instanceName}`);
+        console.log(`- Instance: ${instanceName} (${status})`);
         console.log(`- Database: ${config?.database?.name || 'unknown'}`);
         console.log(`- All files and uploads`);
 
@@ -1198,21 +1284,28 @@ createDirector();
         if (confirm === 'DELETE') {
             try {
                 // Stop the instance first to close database connections
-                console.log('   🛑 Stopping instance...');
-                try {
-                    execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
-                } catch (e) {
-                    // Instance might not be running, that's okay
-                }
+                console.log('   🛑 Stopping and removing from PM2...');
 
-                // Delete from PM2
-                try {
-                    execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
-                } catch (e) {
-                    // Instance might not exist in PM2, that's okay
+                // Check if instance is in PM2
+                if (this.isInstanceInPM2(instanceName)) {
+                    try {
+                        execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
+                        console.log('   ✅ Instance stopped');
+                    } catch (e) {
+                        console.log('   ⚠️  Instance was not running');
+                    }
+
+                    try {
+                        execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+                        console.log('   ✅ Instance removed from PM2');
+                    } catch (e) {
+                        console.log(`   ⚠️  Could not remove from PM2: ${e.message}`);
+                    }
+
+                    execSync('pm2 save', { stdio: 'pipe' }); // Save PM2 state so deletion persists
+                } else {
+                    console.log('   ℹ️  Instance not in PM2 (already removed or never started)');
                 }
-                execSync('pm2 save', { stdio: 'pipe' }); // Save PM2 state so deletion persists
-                console.log('   ✅ Instance stopped and removed from PM2');
 
                 if (config?.database) {
                     // Wait a moment for connections to fully close
@@ -1646,11 +1739,27 @@ createDirector();
 
         // Check if another instance uses this port
         const allInstances = this.getInstances();
+        const conflictingInstances = [];
         for (const inst of allInstances) {
             if (inst === instanceName) continue;
             const instConfig = this.getInstanceConfig(inst);
             if (instConfig?.port === newPort) {
-                console.log(`❌ Port ${newPort} is already assigned to instance: ${inst}`);
+                conflictingInstances.push({
+                    name: inst,
+                    status: this.getInstanceStatus(inst)
+                });
+            }
+        }
+
+        if (conflictingInstances.length > 0) {
+            console.log(`\n⚠️  Port ${newPort} is already assigned to:`);
+            conflictingInstances.forEach(inst => {
+                console.log(`   - ${inst.name} (${inst.status})`);
+            });
+            console.log(`\n💡 Multiple instances can share a port, but only one can run at a time.`);
+            const proceed = await this.question('Continue with this port? (y/n): ');
+            if (proceed.toLowerCase() !== 'y') {
+                console.log('Port change cancelled.');
                 return;
             }
         }
@@ -1743,7 +1852,23 @@ createDirector();
                         continue;
                     }
 
+                    // Check for port conflicts
+                    const conflictingInstance = this.getRunningInstanceOnPort(config.port);
+                    if (conflictingInstance && conflictingInstance !== instanceName) {
+                        console.log(`   ⚠️  ${instanceName} shares port ${config.port} with running instance ${conflictingInstance}`);
+                        console.log(`   ⏭️  Skipping ${instanceName} (use 'Manage Instances' to switch)`);
+                        failed++;
+                        continue;
+                    }
+
                     //await this.configureFirewall(config.port);
+
+                    // Delete from PM2 if it exists (to reload environment)
+                    try {
+                        execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+                    } catch (e) {
+                        // Instance might not exist in PM2, that's okay
+                    }
 
                     execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
@@ -1851,7 +1976,23 @@ createDirector();
                         continue;
                     }
 
+                    // Check for port conflicts
+                    const conflictingInstance = this.getRunningInstanceOnPort(config.port);
+                    if (conflictingInstance && conflictingInstance !== instanceName) {
+                        console.log(`   ⚠️  ${instanceName} shares port ${config.port} with running instance ${conflictingInstance}`);
+                        console.log(`   ⏭️  Skipping ${instanceName} (use 'Manage Instances' to switch)`);
+                        failed++;
+                        continue;
+                    }
+
                     //await this.configureFirewall(config.port);
+
+                    // Delete from PM2 if it exists (to reload environment)
+                    try {
+                        execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+                    } catch (e) {
+                        // Instance might not exist in PM2, that's okay
+                    }
 
                     execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);

@@ -313,28 +313,224 @@ class InstanceManager {
         }
     }
 
+    async streamLiveLogs(instanceName, errorsOnly = false) {
+        console.log(`\n📡 Live log streaming for ${instanceName}`);
+        console.log('Press "q" and Enter to stop streaming...\n');
+
+        // Close readline temporarily
+        rl.pause();
+
+        return new Promise((resolve) => {
+            const args = ['logs', instanceName, '--timestamp'];
+            if (errorsOnly) {
+                args.push('--err');
+            }
+
+            const logProcess = spawn('pm2', args, {
+                stdio: ['pipe', 'inherit', 'inherit']
+            });
+
+            let stopped = false;
+
+            // Listen for 'q' keypress to stop streaming (works better in SSH)
+            const handleStdin = (data) => {
+                const input = data.toString().trim().toLowerCase();
+                if (input === 'q' && !stopped) {
+                    stopped = true;
+                    logProcess.kill('SIGTERM');
+                }
+            };
+
+            process.stdin.setRawMode(false); // Ensure cooked mode for line buffering
+            process.stdin.resume();
+            process.stdin.on('data', handleStdin);
+
+            logProcess.on('close', () => {
+                if (!stopped) {
+                    stopped = true;
+                }
+                process.stdin.removeListener('data', handleStdin);
+                process.stdin.pause();
+                rl.resume();
+                console.log('\n📡 Streaming stopped\n');
+                resolve();
+            });
+
+            logProcess.on('error', (error) => {
+                if (!stopped) {
+                    stopped = true;
+                }
+                process.stdin.removeListener('data', handleStdin);
+                process.stdin.pause();
+                rl.resume();
+                console.log(`\n❌ Failed to stream logs: ${error.message}\n`);
+                resolve();
+            });
+        });
+    }
+
+    async searchLogs(instanceName) {
+        const searchTerm = await this.question('Enter search term: ');
+        if (!searchTerm.trim()) {
+            console.log('Search cancelled.');
+            return;
+        }
+
+        const caseInsensitive = await this.question('Case insensitive? (y/n): ');
+        const iFlag = caseInsensitive.toLowerCase() === 'y' ? '-i' : '';
+
+        console.log(`\n🔍 Searching for "${searchTerm}"...\n`);
+
+        try {
+            // Get logs and pipe through grep
+            const grepCmd = iFlag ? `grep ${iFlag} "${searchTerm}"` : `grep "${searchTerm}"`;
+            execSync(`pm2 logs ${instanceName} --nostream --lines 1000 --timestamp | ${grepCmd}`, {
+                stdio: 'inherit',
+                shell: true
+            });
+        } catch (error) {
+            if (error.status === 1) {
+                console.log(`\n❌ No matches found for "${searchTerm}"`);
+            } else {
+                console.log(`\n❌ Search failed: ${error.message}`);
+            }
+        }
+    }
+
+    async showRecentLogs(instanceName) {
+        console.log('\n⏱️  Show logs from:');
+        console.log('1. Last 5 minutes');
+        console.log('2. Last 10 minutes');
+        console.log('3. Last 30 minutes');
+        console.log('4. Last hour');
+
+        const choice = await this.question('Choose option (1-4): ');
+
+        const minutes = { '1': 5, '2': 10, '3': 30, '4': 60 }[choice];
+        if (!minutes) {
+            console.log('Invalid option.');
+            return;
+        }
+
+        console.log(`\n📋 Logs from last ${minutes} minutes:\n`);
+
+        try {
+            // Get logs with timestamps (PM2 adds them automatically)
+            const logOutput = execSync(`pm2 logs ${instanceName} --lines 1000 --nostream --timestamp`, {
+                encoding: 'utf8'
+            });
+
+            // Calculate cutoff time
+            const cutoffTime = new Date(Date.now() - minutes * 60 * 1000);
+
+            // Parse and filter logs by timestamp
+            const lines = logOutput.split('\n');
+            const filteredLines = [];
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+
+                // PM2 timestamp formats:
+                // "2025-11-13 12:34:56" or "2025-11-13T12:34:56.789Z" at the start
+                // Try to extract timestamp from the beginning of the line
+                const timestampMatch = line.match(/^(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z)?)/);
+
+                if (timestampMatch) {
+                    const timestampStr = timestampMatch[1].replace(' ', 'T');
+                    const logTime = new Date(timestampStr);
+
+                    if (!isNaN(logTime.getTime()) && logTime >= cutoffTime) {
+                        filteredLines.push(line);
+                    }
+                } else {
+                    // If we can't parse timestamp, include the line (might be continuation of previous log)
+                    if (filteredLines.length > 0) {
+                        filteredLines.push(line);
+                    }
+                }
+            }
+
+            if (filteredLines.length === 0) {
+                console.log(`⚠️  No logs found in the last ${minutes} minutes`);
+                console.log(`   (searched ${lines.length} lines)`);
+            } else {
+                console.log(`Found ${filteredLines.length} log lines from the last ${minutes} minutes:\n`);
+                console.log(filteredLines.join('\n'));
+            }
+        } catch (error) {
+            console.log(`❌ Failed to show logs: ${error.message}`);
+        }
+    }
+
+    async saveLogsToFile(instanceName) {
+        const defaultFilename = `${instanceName}_logs_${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+        const filename = await this.question(`Save to filename (${defaultFilename}): `);
+        const finalFilename = filename.trim() || defaultFilename;
+
+        try {
+            console.log(`\n💾 Saving logs to ${finalFilename}...`);
+
+            const logContent = execSync(`pm2 logs ${instanceName} --nostream --lines 1000 --timestamp`, {
+                encoding: 'utf8'
+            });
+
+            fs.writeFileSync(finalFilename, logContent);
+            console.log(`✅ Logs saved to ${finalFilename}`);
+        } catch (error) {
+            console.log(`❌ Failed to save logs: ${error.message}`);
+        }
+    }
+
     async showInstanceLogs(instanceName) {
         console.log(`\n📋 Log Options for ${instanceName}:`);
         console.log('1. Last 20 lines');
         console.log('2. Last 50 lines');
         console.log('3. Last 100 lines');
-        console.log('4. Errors only');
+        console.log('4. Last 200 lines');
+        console.log('5. Errors only (last 50)');
+        console.log('6. Live tail (streaming)');
+        console.log('7. Live errors (streaming)');
+        console.log('8. Recent logs (time-based)');
+        console.log('9. Search logs');
+        console.log('10. Save logs to file');
+        console.log('11. All logs (combined stdout/stderr)');
 
-        const logChoice = await this.question('Choose option (1-4): ');
+        const logChoice = await this.question('Choose option (1-11): ');
 
         try {
             switch (logChoice) {
                 case '1':
-                    execSync(`pm2 logs ${instanceName} --lines 20 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 20 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '2':
-                    execSync(`pm2 logs ${instanceName} --lines 50 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 50 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '3':
-                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '4':
-                    execSync(`pm2 logs ${instanceName} --err --lines 50 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 200 --nostream --timestamp`, { stdio: 'inherit' });
+                    break;
+                case '5':
+                    execSync(`pm2 logs ${instanceName} --err --lines 50 --nostream --timestamp`, { stdio: 'inherit' });
+                    break;
+                case '6':
+                    await this.streamLiveLogs(instanceName, false);
+                    break;
+                case '7':
+                    await this.streamLiveLogs(instanceName, true);
+                    break;
+                case '8':
+                    await this.showRecentLogs(instanceName);
+                    break;
+                case '9':
+                    await this.searchLogs(instanceName);
+                    break;
+                case '10':
+                    await this.saveLogsToFile(instanceName);
+                    break;
+                case '11':
+                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 default:
                     console.log('Invalid option.');
@@ -847,7 +1043,7 @@ createDirector();
         const serverDir = path.join(this.instancesDir, instanceName, 'server');
 
         try {
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
             console.log(`   ✅ Instance started in PM2`);
 
@@ -961,7 +1157,7 @@ createDirector();
                 // Instance might not exist in PM2, that's okay
             }
 
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
 
             // Verify instance is actually healthy
@@ -1231,7 +1427,7 @@ createDirector();
                 // Instance might not exist in PM2, that's okay
             }
 
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
 
             // STEP: Health check
@@ -1291,7 +1487,7 @@ createDirector();
                     }
 
                     // Restart old instance
-                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
                     execSync('pm2 save', { stdio: 'pipe' });
 
                     console.log('✅ Rollback successful - instance restored to previous state');
@@ -1487,7 +1683,7 @@ createDirector();
                 execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
             } catch (e) { }
 
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
 
             console.log(`✅ ${instanceName} now running on port ${newPort}`);
@@ -1549,7 +1745,7 @@ createDirector();
 
                     //await this.configureFirewall(config.port);
 
-                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
                     started++;
                 } catch (error) {
@@ -1657,7 +1853,7 @@ createDirector();
 
                     //await this.configureFirewall(config.port);
 
-                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
                     started++;
                 } catch (error) {

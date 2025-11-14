@@ -5,10 +5,11 @@ import {
     Search,
     Download,
     CheckCircle,
-    Star,
+    FlaskConical,
     FileText,
     Clock,
-    Filter
+    Filter,
+    AlertCircle
 } from 'lucide-react';
 import apiService from '../services/apiService';
 
@@ -110,19 +111,9 @@ const ClaimClonesModal = ({ isOpen, onClose, currentUser, onCloneClaimed }) => {
                 <div className="p-6 border-b border-gray-200 flex-shrink-0">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-full flex items-center justify-center">
-                                <Star className="w-5 h-5 text-white" />
-                            </div>
-                            // In the header section, change the text:
+                            <FlaskConical className="w-7 h-7 text-purple-600" />
                             <div>
                                 <h2 className="text-xl font-bold text-gray-900">Claim Research Clones</h2>
-                                <p className="text-sm text-gray-600">
-                                    🎉 Congratulations! You've achieved perfect scores on all practice clones!
-                                </p>
-                            </div>
-
-                            <div className="text-sm text-gray-600">
-                                💡 <strong>Tip:</strong> Claiming a research clone assigns it to you for analysis work.
                             </div>
                         </div>
                         <button
@@ -155,7 +146,9 @@ const ClaimClonesModal = ({ isOpen, onClose, currentUser, onCloneClaimed }) => {
                         </div>
 
                         <div className="flex items-center space-x-2">
+                            {/*
                             <Filter className="w-4 h-4 text-gray-500" />
+                            */}
                             <select
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value)}
@@ -167,11 +160,13 @@ const ClaimClonesModal = ({ isOpen, onClose, currentUser, onCloneClaimed }) => {
                         </div>
                     </div>
 
-                    {/* Results Count */}
+                    
+                    {/* Results Count
                     <div className="mt-2 text-sm text-gray-600">
-                        {filteredClones.length} available practice clone{filteredClones.length !== 1 ? 's' : ''}
+                        {filteredClones.length} available unknown clone{filteredClones.length !== 1 ? 's' : ''}
                         {searchTerm && ` matching "${searchTerm}"`}
                     </div>
+                    */}
                 </div>
 
                 {/* Content */}
@@ -231,7 +226,7 @@ const ClaimClonesModal = ({ isOpen, onClose, currentUser, onCloneClaimed }) => {
                                                 <button
                                                     onClick={() => handleClaimClone(clone.id, clone.cloneName)}
                                                     disabled={claiming === clone.id}
-                                                    className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-2 rounded-lg hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-200 flex items-center space-x-2 font-medium shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
+                                                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 transition-all duration-200 flex items-center space-x-2 font-medium shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
                                                 >
                                                     {claiming === clone.id ? (
                                                         <>
@@ -256,13 +251,23 @@ const ClaimClonesModal = ({ isOpen, onClose, currentUser, onCloneClaimed }) => {
 
                 {/* Footer */}
                 <div className="p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-                    <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-600">
-                            💡 <strong>Tip:</strong> Claiming a clone adds it to your "My Clones" list where you can begin analysis.
+                    <div className="flex items-start justify-between gap-6">
+                        <div className="flex-1">
+                            <div className="flex items-start space-x-3">
+                                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm text-gray-700 space-y-2">
+                                    <p>
+                                        <strong className="text-gray-900">Important:</strong> Double-check the clone name before claiming. Once claimed, it becomes unavailable to other students.
+                                    </p>
+                                    <p>
+                                        If you accidentally claim the wrong clone or don't see your assigned clone listed, contact a Director immediately. Claimed clones will appear in your "My Clones" list.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                         <button
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition duration-200"
+                            className="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition duration-200 flex-shrink-0"
                         >
                             Close
                         </button>

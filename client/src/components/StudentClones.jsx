@@ -73,15 +73,13 @@ const StudentClones = ({
                 <div className="text-right">
                   <div className="flex items-center space-x-2">
                     <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm text-green-700 font-medium">Perfect Scores Achieved!</span>
+                    <span className="text-sm text-green-700 font-medium">All Practice Clones have been marked Completed.</span>
                   </div>
-                  <p className="text-xs text-gray-500">All practice clones completed with 100% scores</p>
                 </div>
                 <button
                   onClick={() => setShowClaimModal(true)}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transform hover:scale-105"
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition-all duration-200 flex items-center space-x-2 font-medium shadow-lg hover:shadow-xl transform hover:scale-105"
                 >
-                  <Star className="w-5 h-5" />
                   <span>Claim More Clones</span>
                 </button>
               </div>

@@ -1,6 +1,6 @@
 // components/DirectorEditQuestions.jsx - Updated to use apiService
 import React, { useState, useEffect, useRef } from 'react';
-import { Edit, Trash2, AlertCircle, Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered, GripVertical } from 'lucide-react';
+import { Edit, Trash2, AlertCircle, Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered, GripVertical, Edit2 } from 'lucide-react';
 import apiService from '../services/apiService';
 
 // Rich Text Editor Component
@@ -243,6 +243,11 @@ const DirectorEditQuestions = () => {
 
   // Group management state
   const [managingGroupsForStep, setManagingGroupsForStep] = useState(null);
+
+  // Rename group state
+  const [renamingGroup, setRenamingGroup] = useState(null); // { step, oldName, questionCount }
+  const [newGroupName, setNewGroupName] = useState('');
+  const [renameError, setRenameError] = useState('');
 
   // Bulk conditional logic state
   const [bulkConditionalStep, setBulkConditionalStep] = useState(null);
@@ -737,6 +742,45 @@ const DirectorEditQuestions = () => {
     } catch (error) {
       console.error('Error updating group order:', error);
       alert('Failed to update group order');
+    }
+  };
+
+  const handleRenameGroup = async () => {
+    setRenameError('');
+
+    if (!newGroupName.trim()) {
+      setRenameError('Group name cannot be empty');
+      return;
+    }
+
+    if (newGroupName.trim() === renamingGroup.oldName) {
+      setRenameError('New name must be different from current name');
+      return;
+    }
+
+    try {
+      const response = await apiService.put('/analysis-questions/rename-group', {
+        step: renamingGroup.step,
+        oldGroupName: renamingGroup.oldName,
+        newGroupName: newGroupName.trim()
+      });
+
+      console.log(`Successfully renamed group: ${response.message}. Updated ${response.updatedCount} questions.`);
+
+      // Refresh questions list
+      await fetchAnalysisQuestions();
+
+      // Close the rename dialog
+      setRenamingGroup(null);
+      setNewGroupName('');
+      setRenameError('');
+    } catch (error) {
+      console.error('Error renaming group:', error);
+      if (error.response?.data?.error) {
+        setRenameError(error.response.data.error);
+      } else {
+        setRenameError('Failed to rename group. Please try again.');
+      }
     }
   };
 
@@ -1855,6 +1899,24 @@ const DirectorEditQuestions = () => {
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
+                        {group.name !== 'Ungrouped' && (
+                          <button
+                            onClick={() => {
+                              setRenamingGroup({
+                                step: managingGroupsForStep,
+                                oldName: group.name,
+                                questionCount: group.questionCount
+                              });
+                              setNewGroupName(group.name);
+                              setRenameError('');
+                            }}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition duration-200"
+                            title="Rename group"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                            Rename
+                          </button>
+                        )}
                         <label className="text-sm font-medium text-gray-700">Order:</label>
                         <input
                           type="number"
@@ -1886,6 +1948,78 @@ const DirectorEditQuestions = () => {
                 className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Group Dialog */}
+      {renamingGroup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">
+                Rename Group
+              </h3>
+              <p className="text-sm text-gray-600 mt-2">
+                Renaming "{renamingGroup.oldName}" will update all {renamingGroup.questionCount} question{renamingGroup.questionCount !== 1 ? 's' : ''} in this group.
+              </p>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Group Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => {
+                      setNewGroupName(e.target.value);
+                      setRenameError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleRenameGroup();
+                      } else if (e.key === 'Escape') {
+                        setRenamingGroup(null);
+                        setNewGroupName('');
+                        setRenameError('');
+                      }
+                    }}
+                    placeholder="Enter new group name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    autoFocus
+                  />
+                </div>
+
+                {renameError && (
+                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-800">{renameError}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setRenamingGroup(null);
+                  setNewGroupName('');
+                  setRenameError('');
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRenameGroup}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200"
+              >
+                Rename Group
               </button>
             </div>
           </div>
