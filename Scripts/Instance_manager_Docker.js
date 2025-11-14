@@ -321,7 +321,7 @@ class InstanceManager {
         rl.pause();
 
         return new Promise((resolve) => {
-            const args = ['logs', instanceName];
+            const args = ['logs', instanceName, '--timestamp'];
             if (errorsOnly) {
                 args.push('--err');
             }
@@ -384,7 +384,7 @@ class InstanceManager {
         try {
             // Get logs and pipe through grep
             const grepCmd = iFlag ? `grep ${iFlag} "${searchTerm}"` : `grep "${searchTerm}"`;
-            execSync(`pm2 logs ${instanceName} --nostream --lines 1000 | ${grepCmd}`, {
+            execSync(`pm2 logs ${instanceName} --nostream --lines 1000 --timestamp | ${grepCmd}`, {
                 stdio: 'inherit',
                 shell: true
             });
@@ -470,7 +470,7 @@ class InstanceManager {
         try {
             console.log(`\n💾 Saving logs to ${finalFilename}...`);
 
-            const logContent = execSync(`pm2 logs ${instanceName} --nostream --lines 1000`, {
+            const logContent = execSync(`pm2 logs ${instanceName} --nostream --lines 1000 --timestamp`, {
                 encoding: 'utf8'
             });
 
@@ -500,19 +500,19 @@ class InstanceManager {
         try {
             switch (logChoice) {
                 case '1':
-                    execSync(`pm2 logs ${instanceName} --lines 20 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 20 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '2':
-                    execSync(`pm2 logs ${instanceName} --lines 50 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 50 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '3':
-                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '4':
-                    execSync(`pm2 logs ${instanceName} --lines 200 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 200 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '5':
-                    execSync(`pm2 logs ${instanceName} --err --lines 50 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --err --lines 50 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 case '6':
                     await this.streamLiveLogs(instanceName, false);
@@ -530,7 +530,7 @@ class InstanceManager {
                     await this.saveLogsToFile(instanceName);
                     break;
                 case '11':
-                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream`, { stdio: 'inherit' });
+                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream --timestamp`, { stdio: 'inherit' });
                     break;
                 default:
                     console.log('Invalid option.');
