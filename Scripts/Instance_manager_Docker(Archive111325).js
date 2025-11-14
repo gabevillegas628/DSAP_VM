@@ -233,7 +233,6 @@ class InstanceManager {
         console.log('\nActions:');
         console.log('r - Restart instance');
         console.log('s - Stop instance');
-        console.log('b - Rebuild instance (update code, keep database)');
         console.log('d - Delete instance (with confirmation)');
         console.log('l - View logs');
         console.log('c - Cancel');
@@ -257,9 +256,6 @@ class InstanceManager {
                 break;
             case 's':
                 await this.stopInstance(instanceName);
-                break;
-            case 'b':
-                await this.rebuildInstance(instanceName);
                 break;
             case 'd':
                 await this.deleteInstance(instanceName);
@@ -878,25 +874,8 @@ createDirector();
 
     async restartInstance(instanceName) {
         try {
-            const config = this.getInstanceConfig(instanceName);
-            if (!config || !config.paths || !config.paths.server) {
-                console.log(`❌ Cannot find config for ${instanceName}`);
-                return;
-            }
-
-            console.log(`🔄 Restarting ${instanceName} (reloading environment)...`);
-
-            // Delete and restart to reload environment variables (pm2 restart doesn't reload .env)
-            try {
-                execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
-            } catch (e) {
-                // Instance might not exist in PM2, that's okay
-            }
-
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
-            execSync('pm2 save', { stdio: 'pipe' });
-
-            console.log(`✅ Restarted ${instanceName} on port ${config.port}`);
+            execSync(`pm2 restart ${instanceName}`, { stdio: 'inherit' });
+            console.log(`✅ Restarted ${instanceName}`);
         } catch (error) {
             console.log(`❌ Failed to restart ${instanceName}: ${error.message}`);
         }
@@ -924,7 +903,6 @@ createDirector();
         if (confirm === 'DELETE') {
             try {
                 execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
-                execSync('pm2 save', { stdio: 'pipe' }); // Save PM2 state so deletion persists
 
                 if (config?.database) {
                     // Drop database using podman exec
@@ -939,110 +917,6 @@ createDirector();
             } catch (error) {
                 console.log(`❌ Failed to delete ${instanceName}: ${error.message}`);
             }
-        }
-    }
-
-    async rebuildInstance(instanceName) {
-        const config = this.getInstanceConfig(instanceName);
-
-        if (!config) {
-            console.log(`❌ Cannot find config for ${instanceName}`);
-            return;
-        }
-
-        console.log(`\n🔨 Rebuild Instance: ${instanceName}`);
-        console.log('================================');
-        console.log('This will:');
-        console.log('  ✓ Update backend and frontend code');
-        console.log('  ✓ Reinstall dependencies');
-        console.log('  ✓ Rebuild frontend');
-        console.log('  ✗ Keep database and data intact');
-        console.log(`\nCurrent port: ${config.port}`);
-
-        const confirm = await this.question('\nProceed with rebuild? (y/n): ');
-
-        if (confirm.toLowerCase() !== 'y') {
-            console.log('Rebuild cancelled.');
-            return;
-        }
-
-        try {
-            console.log('\n🔧 Rebuilding instance...');
-
-            // Stop the instance
-            console.log('   🛑 Stopping instance...');
-            try {
-                execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
-            } catch (e) {
-                // Instance might not be running, that's okay
-            }
-
-            const instanceDir = path.join(this.instancesDir, instanceName);
-            const serverDir = path.join(instanceDir, 'server');
-            const clientDir = path.join(instanceDir, 'client');
-
-            // Backup the .env file (contains database config and other settings)
-            console.log('   💾 Backing up configuration...');
-            const serverEnvBackup = fs.readFileSync(path.join(serverDir, '.env'), 'utf8');
-
-            // Remove old server and client directories
-            console.log('   🗑️  Removing old code...');
-            execSync(`rm -rf ${serverDir}`, { stdio: 'pipe' });
-            execSync(`rm -rf ${clientDir}`, { stdio: 'pipe' });
-
-            // Copy fresh files from base
-            console.log('   📁 Copying fresh code...');
-            execSync(`cp -r ${path.join(this.baseDir, 'server')} ${serverDir}`, { stdio: 'pipe' });
-            execSync(`cp -r ${path.join(this.baseDir, 'client')} ${clientDir}`, { stdio: 'pipe' });
-
-            // Restore .env file
-            console.log('   ♻️  Restoring configuration...');
-            fs.writeFileSync(path.join(serverDir, '.env'), serverEnvBackup);
-
-            // Recreate uploads directory structure
-            const uploadsDir = path.join(serverDir, 'uploads');
-            fs.mkdirSync(uploadsDir, { recursive: true });
-            fs.mkdirSync(path.join(uploadsDir, 'profile-pics'), { recursive: true });
-
-            // Install dependencies
-            console.log('   📦 Installing server dependencies...');
-            execSync('npm install', { cwd: serverDir, stdio: 'pipe' });
-
-            console.log('   📦 Installing client dependencies...');
-            execSync('npm install', { cwd: clientDir, stdio: 'pipe' });
-
-            // Run Prisma generate (schema might have changed)
-            console.log('   🗄️  Generating Prisma client...');
-            execSync('npx prisma generate', { cwd: serverDir, stdio: 'pipe' });
-
-            // Build frontend
-            console.log('   🏗️  Building frontend...');
-            execSync('npm run build', { cwd: clientDir, stdio: 'pipe' });
-
-            // Restart the instance
-            console.log('   🚀 Starting instance...');
-            try {
-                execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
-            } catch (e) {
-                // Instance might not exist in PM2, that's okay
-            }
-
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
-            execSync('pm2 save', { stdio: 'pipe' });
-
-            console.log('\n🎉 Instance rebuilt successfully!');
-            console.log(`🔗 Access your app at: http://localhost:${config.port}`);
-
-            // Offer to view logs
-            const viewLogs = await this.question('\nWould you like to view the logs? (y/n): ');
-            if (viewLogs.toLowerCase() === 'y') {
-                await this.showInstanceLogs(instanceName);
-            }
-
-        } catch (error) {
-            console.error(`\n❌ Failed to rebuild instance: ${error.message}`);
-            console.log('\n⚠️  The instance may be in an inconsistent state.');
-            console.log('You may need to delete and recreate it if it does not start.');
         }
     }
 
