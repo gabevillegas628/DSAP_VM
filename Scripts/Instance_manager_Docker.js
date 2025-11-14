@@ -313,14 +313,136 @@ class InstanceManager {
         }
     }
 
+    async streamLiveLogs(instanceName, errorsOnly = false) {
+        console.log(`\n📡 Live log streaming for ${instanceName}`);
+        console.log('Press Ctrl+C to stop streaming...\n');
+
+        // Close readline temporarily to allow streaming
+        rl.pause();
+
+        return new Promise((resolve) => {
+            const args = ['logs', instanceName];
+            if (errorsOnly) {
+                args.push('--err');
+            }
+
+            const logProcess = spawn('pm2', args, {
+                stdio: ['ignore', 'inherit', 'inherit']
+            });
+
+            // Handle Ctrl+C to stop streaming
+            const handleInterrupt = () => {
+                logProcess.kill('SIGTERM');
+            };
+
+            process.on('SIGINT', handleInterrupt);
+
+            logProcess.on('close', () => {
+                process.removeListener('SIGINT', handleInterrupt);
+                rl.resume();
+                console.log('\n\n📡 Streaming stopped');
+                resolve();
+            });
+
+            logProcess.on('error', (error) => {
+                process.removeListener('SIGINT', handleInterrupt);
+                rl.resume();
+                console.log(`\n❌ Failed to stream logs: ${error.message}`);
+                resolve();
+            });
+        });
+    }
+
+    async searchLogs(instanceName) {
+        const searchTerm = await this.question('Enter search term: ');
+        if (!searchTerm.trim()) {
+            console.log('Search cancelled.');
+            return;
+        }
+
+        const caseInsensitive = await this.question('Case insensitive? (y/n): ');
+        const iFlag = caseInsensitive.toLowerCase() === 'y' ? '-i' : '';
+
+        console.log(`\n🔍 Searching for "${searchTerm}"...\n`);
+
+        try {
+            // Get logs and pipe through grep
+            const grepCmd = iFlag ? `grep ${iFlag} "${searchTerm}"` : `grep "${searchTerm}"`;
+            execSync(`pm2 logs ${instanceName} --nostream --lines 1000 | ${grepCmd}`, {
+                stdio: 'inherit',
+                shell: true
+            });
+        } catch (error) {
+            if (error.status === 1) {
+                console.log(`\n❌ No matches found for "${searchTerm}"`);
+            } else {
+                console.log(`\n❌ Search failed: ${error.message}`);
+            }
+        }
+    }
+
+    async showRecentLogs(instanceName) {
+        console.log('\n⏱️  Show logs from:');
+        console.log('1. Last 5 minutes');
+        console.log('2. Last 10 minutes');
+        console.log('3. Last 30 minutes');
+        console.log('4. Last hour');
+
+        const choice = await this.question('Choose option (1-4): ');
+
+        const minutes = { '1': 5, '2': 10, '3': 30, '4': 60 }[choice];
+        if (!minutes) {
+            console.log('Invalid option.');
+            return;
+        }
+
+        console.log(`\n📋 Logs from last ${minutes} minutes:\n`);
+
+        try {
+            // PM2 doesn't have native time filtering, so we'll get recent logs and note the limitation
+            console.log(`⚠️  Note: Showing last 200 lines (PM2 doesn't support time-based filtering)`);
+            console.log(`   Logs are typically from the last few minutes\n`);
+
+            execSync(`pm2 logs ${instanceName} --lines 200 --nostream`, { stdio: 'inherit' });
+        } catch (error) {
+            console.log(`❌ Failed to show logs: ${error.message}`);
+        }
+    }
+
+    async saveLogsToFile(instanceName) {
+        const defaultFilename = `${instanceName}_logs_${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+        const filename = await this.question(`Save to filename (${defaultFilename}): `);
+        const finalFilename = filename.trim() || defaultFilename;
+
+        try {
+            console.log(`\n💾 Saving logs to ${finalFilename}...`);
+
+            const logContent = execSync(`pm2 logs ${instanceName} --nostream --lines 1000`, {
+                encoding: 'utf8'
+            });
+
+            fs.writeFileSync(finalFilename, logContent);
+            console.log(`✅ Logs saved to ${finalFilename}`);
+        } catch (error) {
+            console.log(`❌ Failed to save logs: ${error.message}`);
+        }
+    }
+
     async showInstanceLogs(instanceName) {
         console.log(`\n📋 Log Options for ${instanceName}:`);
         console.log('1. Last 20 lines');
         console.log('2. Last 50 lines');
         console.log('3. Last 100 lines');
-        console.log('4. Errors only');
+        console.log('4. Last 200 lines');
+        console.log('5. Errors only (last 50)');
+        console.log('6. Live tail (streaming)');
+        console.log('7. Live errors (streaming)');
+        console.log('8. Recent logs (time-based)');
+        console.log('9. Search logs');
+        console.log('10. Save logs to file');
+        console.log('11. All logs (combined stdout/stderr)');
 
-        const logChoice = await this.question('Choose option (1-4): ');
+        const logChoice = await this.question('Choose option (1-11): ');
 
         try {
             switch (logChoice) {
@@ -334,7 +456,28 @@ class InstanceManager {
                     execSync(`pm2 logs ${instanceName} --lines 100 --nostream`, { stdio: 'inherit' });
                     break;
                 case '4':
+                    execSync(`pm2 logs ${instanceName} --lines 200 --nostream`, { stdio: 'inherit' });
+                    break;
+                case '5':
                     execSync(`pm2 logs ${instanceName} --err --lines 50 --nostream`, { stdio: 'inherit' });
+                    break;
+                case '6':
+                    await this.streamLiveLogs(instanceName, false);
+                    break;
+                case '7':
+                    await this.streamLiveLogs(instanceName, true);
+                    break;
+                case '8':
+                    await this.showRecentLogs(instanceName);
+                    break;
+                case '9':
+                    await this.searchLogs(instanceName);
+                    break;
+                case '10':
+                    await this.saveLogsToFile(instanceName);
+                    break;
+                case '11':
+                    execSync(`pm2 logs ${instanceName} --lines 100 --nostream`, { stdio: 'inherit' });
                     break;
                 default:
                     console.log('Invalid option.');

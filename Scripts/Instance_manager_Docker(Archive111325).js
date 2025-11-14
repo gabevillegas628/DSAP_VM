@@ -849,7 +849,18 @@ createDirector();
         try {
             execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
-            console.log(`   ✅ Instance started on port ${port}`);
+            console.log(`   ✅ Instance started in PM2`);
+
+            // Verify instance is actually healthy
+            console.log(`   🔍 Verifying instance health...`);
+            const health = await this.verifyInstanceHealth(instanceName, port);
+
+            if (health.healthy) {
+                console.log(`   ✅ Instance is healthy and responding on port ${port}`);
+            } else {
+                console.log(`   ⚠️  Instance started but may have issues: ${health.reason}`);
+                console.log(`   💡 Check logs with: pm2 logs ${instanceName}`);
+            }
         } catch (error) {
             throw new Error(`Failed to start instance: ${error.message}`);
         }
@@ -876,6 +887,63 @@ createDirector();
         }
     }
 
+    async verifyInstanceHealth(instanceName, port, maxAttempts = 10) {
+        // Wait a moment for the instance to initialize
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                // Check PM2 status first
+                const pm2Status = this.getInstanceStatus(instanceName);
+                if (pm2Status !== 'online') {
+                    if (attempt < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        continue;
+                    }
+                    return { healthy: false, reason: `PM2 status is ${pm2Status}` };
+                }
+
+                // Try to connect to the port
+                const net = require('net');
+                const client = new net.Socket();
+
+                const connected = await new Promise((resolve) => {
+                    client.setTimeout(2000);
+
+                    client.connect(port, '127.0.0.1', () => {
+                        client.destroy();
+                        resolve(true);
+                    });
+
+                    client.on('error', () => {
+                        resolve(false);
+                    });
+
+                    client.on('timeout', () => {
+                        client.destroy();
+                        resolve(false);
+                    });
+                });
+
+                if (connected) {
+                    return { healthy: true, reason: 'Instance is responding' };
+                }
+
+                // If not connected and we have more attempts, wait and retry
+                if (attempt < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } catch (error) {
+                if (attempt === maxAttempts) {
+                    return { healthy: false, reason: `Health check failed: ${error.message}` };
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+
+        return { healthy: false, reason: `Port ${port} not responding after ${maxAttempts} attempts` };
+    }
+
     async restartInstance(instanceName) {
         try {
             const config = this.getInstanceConfig(instanceName);
@@ -896,9 +964,19 @@ createDirector();
             execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
 
-            console.log(`✅ Restarted ${instanceName} on port ${config.port}`);
+            // Verify instance is actually healthy
+            console.log(`🔍 Verifying instance health...`);
+            const health = await this.verifyInstanceHealth(instanceName, config.port);
+
+            if (health.healthy) {
+                console.log(`✅ ${instanceName} restarted successfully and is responding on port ${config.port}`);
+            } else {
+                console.log(`⚠️  ${instanceName} restarted but may have issues: ${health.reason}`);
+                console.log(`💡 Check logs with: pm2 logs ${instanceName}`);
+            }
         } catch (error) {
             console.log(`❌ Failed to restart ${instanceName}: ${error.message}`);
+            console.log(`💡 Try checking: pm2 logs ${instanceName} --err`);
         }
     }
 
@@ -999,10 +1077,42 @@ createDirector();
             return;
         }
 
+        // PRE-FLIGHT VALIDATION
+        console.log('\n🔍 Pre-flight checks...');
+        const baseServerDir = path.join(this.baseDir, 'server');
+        const baseClientDir = path.join(this.baseDir, 'client');
+
+        if (!fs.existsSync(baseServerDir)) {
+            console.log(`❌ Base server directory not found: ${baseServerDir}`);
+            console.log('💡 Make sure you have the base server code in the project root');
+            return;
+        }
+
+        if (!fs.existsSync(baseClientDir)) {
+            console.log(`❌ Base client directory not found: ${baseClientDir}`);
+            console.log('💡 Make sure you have the base client code in the project root');
+            return;
+        }
+
+        console.log('   ✅ Base directories validated');
+
+        // Ask about schema changes
+        console.log('\n⚠️  Database Schema Changes');
+        console.log('If you made changes to the Prisma schema, the database needs to be updated.');
+        console.log('WARNING: Some schema changes can cause DATA LOSS (e.g., dropping columns).');
+        const schemaChanged = await this.question('\nDid you change the Prisma schema? (y/n): ');
+
+        const instanceDir = path.join(this.instancesDir, instanceName);
+        const serverDir = path.join(instanceDir, 'server');
+        const clientDir = path.join(instanceDir, 'client');
+        const rollbackDir = path.join(instanceDir, 'rollback_backup');
+        let currentStep = 'initialization';
+
         try {
             console.log('\n🔧 Rebuilding instance...');
 
-            // Stop the instance
+            // STEP: Stop the instance
+            currentStep = 'stopping instance';
             console.log('   🛑 Stopping instance...');
             try {
                 execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
@@ -1010,64 +1120,110 @@ createDirector();
                 // Instance might not be running, that's okay
             }
 
-            const instanceDir = path.join(this.instancesDir, instanceName);
-            const serverDir = path.join(instanceDir, 'server');
-            const clientDir = path.join(instanceDir, 'client');
+            // STEP: Create full rollback backup
+            currentStep = 'creating rollback backup';
+            console.log('   💾 Creating rollback backup...');
+
+            // Remove old rollback backup if exists
+            if (fs.existsSync(rollbackDir)) {
+                execSync(`rm -rf ${rollbackDir}`, { stdio: 'pipe' });
+            }
+
+            fs.mkdirSync(rollbackDir, { recursive: true });
+
+            if (fs.existsSync(serverDir)) {
+                execSync(`cp -r ${serverDir} ${path.join(rollbackDir, 'server')}`, { stdio: 'pipe' });
+            }
+            if (fs.existsSync(clientDir)) {
+                execSync(`cp -r ${clientDir} ${path.join(rollbackDir, 'client')}`, { stdio: 'pipe' });
+            }
+
+            const configPath = path.join(instanceDir, 'config.json');
+            if (fs.existsSync(configPath)) {
+                fs.copyFileSync(configPath, path.join(rollbackDir, 'config.json'));
+            }
+
+            console.log('   ✅ Rollback backup created');
+
+            // STEP: Backup uploads
+            currentStep = 'backing up uploads';
             const uploadsDir = path.join(serverDir, 'uploads');
             const uploadsBackupDir = path.join(instanceDir, 'uploads_backup_temp');
 
-            // Backup the .env file (contains database config and other settings)
-            console.log('   💾 Backing up configuration and uploads...');
-            const serverEnvBackup = fs.readFileSync(path.join(serverDir, '.env'), 'utf8');
-
-            // Backup uploads directory (contains user data like sequences and profile pics)
+            console.log('   💾 Backing up user data...');
             if (fs.existsSync(uploadsDir)) {
                 execSync(`cp -r ${uploadsDir} ${uploadsBackupDir}`, { stdio: 'pipe' });
-                console.log('   ✅ Uploads backed up');
+                console.log('   ✅ User data backed up');
             }
 
-            // Remove old server and client directories
+            // STEP: Backup .env
+            currentStep = 'backing up configuration';
+            const serverEnvBackup = fs.readFileSync(path.join(serverDir, '.env'), 'utf8');
+
+            // STEP: Remove old code
+            currentStep = 'removing old code';
             console.log('   🗑️  Removing old code...');
             execSync(`rm -rf ${serverDir}`, { stdio: 'pipe' });
             execSync(`rm -rf ${clientDir}`, { stdio: 'pipe' });
 
-            // Copy fresh files from base
+            // STEP: Copy fresh code
+            currentStep = 'copying fresh code';
             console.log('   📁 Copying fresh code...');
-            execSync(`cp -r ${path.join(this.baseDir, 'server')} ${serverDir}`, { stdio: 'pipe' });
-            execSync(`cp -r ${path.join(this.baseDir, 'client')} ${clientDir}`, { stdio: 'pipe' });
+            execSync(`cp -r ${baseServerDir} ${serverDir}`, { stdio: 'pipe' });
+            execSync(`cp -r ${baseClientDir} ${clientDir}`, { stdio: 'pipe' });
 
-            // Restore .env file
-            console.log('   ♻️  Restoring configuration and uploads...');
+            // STEP: Restore configuration
+            currentStep = 'restoring configuration';
+            console.log('   ♻️  Restoring configuration...');
             fs.writeFileSync(path.join(serverDir, '.env'), serverEnvBackup);
 
-            // Restore uploads directory with all user data
+            // STEP: Restore uploads
+            currentStep = 'restoring user data';
             if (fs.existsSync(uploadsBackupDir)) {
-                execSync(`rm -rf ${uploadsDir}`, { stdio: 'pipe' }); // Remove empty uploads dir from fresh copy
-                execSync(`cp -r ${uploadsBackupDir} ${uploadsDir}`, { stdio: 'pipe' });
-                execSync(`rm -rf ${uploadsBackupDir}`, { stdio: 'pipe' }); // Clean up temp backup
-                console.log('   ✅ Uploads restored');
+                const newUploadsDir = path.join(serverDir, 'uploads');
+                execSync(`rm -rf ${newUploadsDir}`, { stdio: 'pipe' });
+                execSync(`cp -r ${uploadsBackupDir} ${newUploadsDir}`, { stdio: 'pipe' });
+                console.log('   ✅ User data restored');
             } else {
-                // No uploads to restore, create empty structure
-                fs.mkdirSync(uploadsDir, { recursive: true });
-                fs.mkdirSync(path.join(uploadsDir, 'profile-pics'), { recursive: true });
+                fs.mkdirSync(path.join(serverDir, 'uploads'), { recursive: true });
+                fs.mkdirSync(path.join(serverDir, 'uploads', 'profile-pics'), { recursive: true });
             }
 
-            // Install dependencies
+            // STEP: Install server dependencies
+            currentStep = 'installing server dependencies';
             console.log('   📦 Installing server dependencies...');
             execSync('npm install', { cwd: serverDir, stdio: 'pipe' });
 
+            // STEP: Install client dependencies
+            currentStep = 'installing client dependencies';
             console.log('   📦 Installing client dependencies...');
             execSync('npm install', { cwd: clientDir, stdio: 'pipe' });
 
-            // Run Prisma generate (schema might have changed)
+            // STEP: Generate Prisma client
+            currentStep = 'generating Prisma client';
             console.log('   🗄️  Generating Prisma client...');
             execSync('npx prisma generate', { cwd: serverDir, stdio: 'pipe' });
 
-            // Build frontend
+            // STEP: Apply schema changes if requested
+            if (schemaChanged.toLowerCase() === 'y') {
+                currentStep = 'applying schema changes';
+                console.log('   🗄️  Applying schema changes to database...');
+                console.log('   ⚠️  This may cause data loss if columns were removed or types changed!');
+                try {
+                    execSync('npx prisma db push --accept-data-loss', { cwd: serverDir, stdio: 'pipe' });
+                    console.log('   ✅ Schema changes applied');
+                } catch (error) {
+                    throw new Error(`Schema update failed: ${error.message}`);
+                }
+            }
+
+            // STEP: Build frontend
+            currentStep = 'building frontend';
             console.log('   🏗️  Building frontend...');
             execSync('npm run build', { cwd: clientDir, stdio: 'pipe' });
 
-            // Restart the instance
+            // STEP: Start instance
+            currentStep = 'starting instance';
             console.log('   🚀 Starting instance...');
             try {
                 execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
@@ -1077,6 +1233,25 @@ createDirector();
 
             execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
+
+            // STEP: Health check
+            currentStep = 'verifying instance health';
+            console.log('   🔍 Verifying instance health...');
+            const health = await this.verifyInstanceHealth(instanceName, config.port);
+
+            if (!health.healthy) {
+                throw new Error(`Instance not healthy: ${health.reason}`);
+            }
+
+            console.log('   ✅ Instance is healthy and responding');
+
+            // Clean up temp files
+            this.cleanupTempFiles(instanceName);
+
+            // Remove rollback backup on success
+            if (fs.existsSync(rollbackDir)) {
+                execSync(`rm -rf ${rollbackDir}`, { stdio: 'pipe' });
+            }
 
             console.log('\n🎉 Instance rebuilt successfully!');
             console.log(`🔗 Access your app at: http://localhost:${config.port}`);
@@ -1088,15 +1263,75 @@ createDirector();
             }
 
         } catch (error) {
-            console.error(`\n❌ Failed to rebuild instance: ${error.message}`);
-            console.log('\n⚠️  The instance may be in an inconsistent state.');
-            console.log('You may need to delete and recreate it if it does not start.');
+            console.error(`\n❌ Failed at: ${currentStep}`);
+            console.error(`Error: ${error.message}`);
+            console.log('\n🔄 Attempting to rollback to previous state...');
+
+            // ROLLBACK
+            try {
+                // Stop the broken instance
+                try {
+                    execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
+                    execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+                } catch (e) { }
+
+                // Restore from rollback backup
+                if (fs.existsSync(rollbackDir)) {
+                    const rollbackServerDir = path.join(rollbackDir, 'server');
+                    const rollbackClientDir = path.join(rollbackDir, 'client');
+
+                    if (fs.existsSync(rollbackServerDir)) {
+                        execSync(`rm -rf ${serverDir}`, { stdio: 'pipe' });
+                        execSync(`cp -r ${rollbackServerDir} ${serverDir}`, { stdio: 'pipe' });
+                    }
+
+                    if (fs.existsSync(rollbackClientDir)) {
+                        execSync(`rm -rf ${clientDir}`, { stdio: 'pipe' });
+                        execSync(`cp -r ${rollbackClientDir} ${clientDir}`, { stdio: 'pipe' });
+                    }
+
+                    // Restart old instance
+                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+                    execSync('pm2 save', { stdio: 'pipe' });
+
+                    console.log('✅ Rollback successful - instance restored to previous state');
+                    console.log(`💡 Instance is running again on port ${config.port}`);
+                } else {
+                    console.log('⚠️  No rollback backup found - instance may be in inconsistent state');
+                    console.log('💡 You may need to delete and recreate the instance');
+                }
+            } catch (rollbackError) {
+                console.error(`❌ Rollback failed: ${rollbackError.message}`);
+                console.log('⚠️  Instance is in an inconsistent state');
+                console.log('💡 You may need to delete and recreate the instance');
+            }
+        } finally {
+            // Always clean up temp files
+            this.cleanupTempFiles(instanceName);
         }
     }
 
     async unregisterFromPgBouncer(dbName, dbUser) {
         // Not needed with containerized setup
         console.log('   ✅ Database removed (PgBouncer auto-adjusts)');
+    }
+
+    cleanupTempFiles(instanceName) {
+        const instanceDir = path.join(this.instancesDir, instanceName);
+        const tempDirs = [
+            path.join(instanceDir, 'uploads_backup_temp'),
+            path.join(instanceDir, 'rollback_backup')
+        ];
+
+        for (const tempDir of tempDirs) {
+            try {
+                if (fs.existsSync(tempDir)) {
+                    execSync(`rm -rf ${tempDir}`, { stdio: 'pipe' });
+                }
+            } catch (error) {
+                // Silently fail - cleanup is best effort
+            }
+        }
     }
 
     async cleanupFailedInstance(instanceName) {
