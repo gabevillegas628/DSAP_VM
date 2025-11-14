@@ -415,11 +415,48 @@ class InstanceManager {
         console.log(`\n📋 Logs from last ${minutes} minutes:\n`);
 
         try {
-            // PM2 doesn't have native time filtering, so we'll get recent logs and note the limitation
-            console.log(`⚠️  Note: Showing last 200 lines (PM2 doesn't support time-based filtering)`);
-            console.log(`   Logs are typically from the last few minutes\n`);
+            // Get logs with timestamps (PM2 adds them automatically)
+            const logOutput = execSync(`pm2 logs ${instanceName} --lines 1000 --nostream --timestamp`, {
+                encoding: 'utf8'
+            });
 
-            execSync(`pm2 logs ${instanceName} --lines 200 --nostream`, { stdio: 'inherit' });
+            // Calculate cutoff time
+            const cutoffTime = new Date(Date.now() - minutes * 60 * 1000);
+
+            // Parse and filter logs by timestamp
+            const lines = logOutput.split('\n');
+            const filteredLines = [];
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+
+                // PM2 timestamp formats:
+                // "2025-11-13 12:34:56" or "2025-11-13T12:34:56.789Z" at the start
+                // Try to extract timestamp from the beginning of the line
+                const timestampMatch = line.match(/^(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z)?)/);
+
+                if (timestampMatch) {
+                    const timestampStr = timestampMatch[1].replace(' ', 'T');
+                    const logTime = new Date(timestampStr);
+
+                    if (!isNaN(logTime.getTime()) && logTime >= cutoffTime) {
+                        filteredLines.push(line);
+                    }
+                } else {
+                    // If we can't parse timestamp, include the line (might be continuation of previous log)
+                    if (filteredLines.length > 0) {
+                        filteredLines.push(line);
+                    }
+                }
+            }
+
+            if (filteredLines.length === 0) {
+                console.log(`⚠️  No logs found in the last ${minutes} minutes`);
+                console.log(`   (searched ${lines.length} lines)`);
+            } else {
+                console.log(`Found ${filteredLines.length} log lines from the last ${minutes} minutes:\n`);
+                console.log(filteredLines.join('\n'));
+            }
         } catch (error) {
             console.log(`❌ Failed to show logs: ${error.message}`);
         }
