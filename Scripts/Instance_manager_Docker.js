@@ -315,9 +315,9 @@ class InstanceManager {
 
     async streamLiveLogs(instanceName, errorsOnly = false) {
         console.log(`\n📡 Live log streaming for ${instanceName}`);
-        console.log('Press Ctrl+C to stop streaming...\n');
+        console.log('Press "q" and Enter to stop streaming...\n');
 
-        // Close readline temporarily to allow streaming
+        // Close readline temporarily
         rl.pause();
 
         return new Promise((resolve) => {
@@ -327,27 +327,43 @@ class InstanceManager {
             }
 
             const logProcess = spawn('pm2', args, {
-                stdio: ['ignore', 'inherit', 'inherit']
+                stdio: ['pipe', 'inherit', 'inherit']
             });
 
-            // Handle Ctrl+C to stop streaming
-            const handleInterrupt = () => {
-                logProcess.kill('SIGTERM');
+            let stopped = false;
+
+            // Listen for 'q' keypress to stop streaming (works better in SSH)
+            const handleStdin = (data) => {
+                const input = data.toString().trim().toLowerCase();
+                if (input === 'q' && !stopped) {
+                    stopped = true;
+                    logProcess.kill('SIGTERM');
+                }
             };
 
-            process.on('SIGINT', handleInterrupt);
+            process.stdin.setRawMode(false); // Ensure cooked mode for line buffering
+            process.stdin.resume();
+            process.stdin.on('data', handleStdin);
 
             logProcess.on('close', () => {
-                process.removeListener('SIGINT', handleInterrupt);
+                if (!stopped) {
+                    stopped = true;
+                }
+                process.stdin.removeListener('data', handleStdin);
+                process.stdin.pause();
                 rl.resume();
-                console.log('\n\n📡 Streaming stopped');
+                console.log('\n📡 Streaming stopped\n');
                 resolve();
             });
 
             logProcess.on('error', (error) => {
-                process.removeListener('SIGINT', handleInterrupt);
+                if (!stopped) {
+                    stopped = true;
+                }
+                process.stdin.removeListener('data', handleStdin);
+                process.stdin.pause();
                 rl.resume();
-                console.log(`\n❌ Failed to stream logs: ${error.message}`);
+                console.log(`\n❌ Failed to stream logs: ${error.message}\n`);
                 resolve();
             });
         });
