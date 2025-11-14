@@ -1043,7 +1043,7 @@ createDirector();
         const serverDir = path.join(this.instancesDir, instanceName, 'server');
 
         try {
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
             console.log(`   ✅ Instance started in PM2`);
 
@@ -1157,7 +1157,7 @@ createDirector();
                 // Instance might not exist in PM2, that's okay
             }
 
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
 
             // Verify instance is actually healthy
@@ -1427,7 +1427,7 @@ createDirector();
                 // Instance might not exist in PM2, that's okay
             }
 
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
 
             // STEP: Health check
@@ -1487,7 +1487,7 @@ createDirector();
                     }
 
                     // Restart old instance
-                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
                     execSync('pm2 save', { stdio: 'pipe' });
 
                     console.log('✅ Rollback successful - instance restored to previous state');
@@ -1683,7 +1683,7 @@ createDirector();
                 execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
             } catch (e) { }
 
-            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir}`, { stdio: 'pipe' });
+            execSync(`pm2 start index.js --name ${instanceName} --cwd ${serverDir} --time`, { stdio: 'pipe' });
             execSync('pm2 save', { stdio: 'pipe' });
 
             console.log(`✅ ${instanceName} now running on port ${newPort}`);
@@ -1745,7 +1745,7 @@ createDirector();
 
                     //await this.configureFirewall(config.port);
 
-                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
                     started++;
                 } catch (error) {
@@ -1853,7 +1853,7 @@ createDirector();
 
                     //await this.configureFirewall(config.port);
 
-                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server}`, { stdio: 'pipe' });
+                    execSync(`pm2 start index.js --name ${instanceName} --cwd ${config.paths.server} --time`, { stdio: 'pipe' });
                     console.log(`   ✅ Started ${instanceName} on port ${config.port}`);
                     started++;
                 } catch (error) {
