@@ -923,11 +923,44 @@ createDirector();
 
         if (confirm === 'DELETE') {
             try {
-                execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+                // Stop the instance first to close database connections
+                console.log('   🛑 Stopping instance...');
+                try {
+                    execSync(`pm2 stop ${instanceName}`, { stdio: 'pipe' });
+                } catch (e) {
+                    // Instance might not be running, that's okay
+                }
+
+                // Delete from PM2
+                try {
+                    execSync(`pm2 delete ${instanceName}`, { stdio: 'pipe' });
+                } catch (e) {
+                    // Instance might not exist in PM2, that's okay
+                }
                 execSync('pm2 save', { stdio: 'pipe' }); // Save PM2 state so deletion persists
+                console.log('   ✅ Instance stopped and removed from PM2');
 
                 if (config?.database) {
-                    // Drop database using podman exec
+                    // Wait a moment for connections to fully close
+                    console.log('   ⏳ Waiting for database connections to close...');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                    // Force-terminate any remaining connections to the database
+                    const terminateConnections = `
+                        SELECT pg_terminate_backend(pg_stat_activity.pid)
+                        FROM pg_stat_activity
+                        WHERE pg_stat_activity.datname = '${config.database.name}'
+                        AND pid <> pg_backend_pid();
+                    `;
+
+                    try {
+                        execSync(`podman exec postgres psql -U postgres -c "${terminateConnections}"`, { stdio: 'pipe' });
+                        console.log('   ✅ Database connections terminated');
+                    } catch (e) {
+                        // Connections might already be closed, that's okay
+                    }
+
+                    // Now drop the database
                     execSync(`podman exec postgres dropdb -U postgres ${config.database.name}`, { stdio: 'pipe' });
                     execSync(`podman exec postgres psql -U postgres -c "DROP USER IF EXISTS ${config.database.user}"`, { stdio: 'pipe' });
 
@@ -980,10 +1013,18 @@ createDirector();
             const instanceDir = path.join(this.instancesDir, instanceName);
             const serverDir = path.join(instanceDir, 'server');
             const clientDir = path.join(instanceDir, 'client');
+            const uploadsDir = path.join(serverDir, 'uploads');
+            const uploadsBackupDir = path.join(instanceDir, 'uploads_backup_temp');
 
             // Backup the .env file (contains database config and other settings)
-            console.log('   💾 Backing up configuration...');
+            console.log('   💾 Backing up configuration and uploads...');
             const serverEnvBackup = fs.readFileSync(path.join(serverDir, '.env'), 'utf8');
+
+            // Backup uploads directory (contains user data like sequences and profile pics)
+            if (fs.existsSync(uploadsDir)) {
+                execSync(`cp -r ${uploadsDir} ${uploadsBackupDir}`, { stdio: 'pipe' });
+                console.log('   ✅ Uploads backed up');
+            }
 
             // Remove old server and client directories
             console.log('   🗑️  Removing old code...');
@@ -996,13 +1037,20 @@ createDirector();
             execSync(`cp -r ${path.join(this.baseDir, 'client')} ${clientDir}`, { stdio: 'pipe' });
 
             // Restore .env file
-            console.log('   ♻️  Restoring configuration...');
+            console.log('   ♻️  Restoring configuration and uploads...');
             fs.writeFileSync(path.join(serverDir, '.env'), serverEnvBackup);
 
-            // Recreate uploads directory structure
-            const uploadsDir = path.join(serverDir, 'uploads');
-            fs.mkdirSync(uploadsDir, { recursive: true });
-            fs.mkdirSync(path.join(uploadsDir, 'profile-pics'), { recursive: true });
+            // Restore uploads directory with all user data
+            if (fs.existsSync(uploadsBackupDir)) {
+                execSync(`rm -rf ${uploadsDir}`, { stdio: 'pipe' }); // Remove empty uploads dir from fresh copy
+                execSync(`cp -r ${uploadsBackupDir} ${uploadsDir}`, { stdio: 'pipe' });
+                execSync(`rm -rf ${uploadsBackupDir}`, { stdio: 'pipe' }); // Clean up temp backup
+                console.log('   ✅ Uploads restored');
+            } else {
+                // No uploads to restore, create empty structure
+                fs.mkdirSync(uploadsDir, { recursive: true });
+                fs.mkdirSync(path.join(uploadsDir, 'profile-pics'), { recursive: true });
+            }
 
             // Install dependencies
             console.log('   📦 Installing server dependencies...');
