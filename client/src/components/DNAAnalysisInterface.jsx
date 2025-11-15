@@ -1164,7 +1164,16 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
       return minOrderA - minOrderB;
     });
 
-    return sortedGroups;
+    // Sort questions within each group by their order
+    return sortedGroups.map(([groupName, questions]) => [
+      groupName,
+      questions.sort((a, b) => {
+        if (a.groupOrder !== b.groupOrder) {
+          return a.groupOrder - b.groupOrder;
+        }
+        return a.order - b.order;
+      })
+    ]);
   };
 
   const getGroupsForStep = (stepId) => {
@@ -1185,8 +1194,18 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
       return groups;
     }, {});
 
-    // Sort groups by groupOrder
-    return Object.values(grouped).sort((a, b) => a.groupOrder - b.groupOrder);
+    // Sort groups by groupOrder and sort questions within each group
+    return Object.values(grouped)
+      .map(group => ({
+        ...group,
+        questions: group.questions.sort((a, b) => {
+          if (a.groupOrder !== b.groupOrder) {
+            return a.groupOrder - b.groupOrder;
+          }
+          return a.order - b.order;
+        })
+      }))
+      .sort((a, b) => a.groupOrder - b.groupOrder);
   };
 
   // Function to handle step navigation (reset group when changing steps)

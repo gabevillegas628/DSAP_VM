@@ -6,6 +6,8 @@
 
 This directory contains the one-time database infrastructure setup for the containerized PostgreSQL + PgBouncer system.
 
+MUST BE RUN FROM PROJECT ROOT!
+
 ## Files
 
 ### setup-infra.sh
