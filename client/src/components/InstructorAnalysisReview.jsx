@@ -145,6 +145,8 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
 
     const { currentUser } = useDNAContext(); // ADD THIS LINE
 
+    // Define display-only question types that don't require answers
+    const NON_QUESTION_TYPES = ['text_header', 'section_divider', 'info_text', 'blast_comparison', 'sequence_display'];
 
     useEffect(() => {
         if (currentUser?.school?.id) {
@@ -1705,6 +1707,7 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
         return analysisQuestions
             .filter(q => q.step === sectionId)
             .filter(q => shouldShowQuestion(q, answers))
+            .filter(q => !NON_QUESTION_TYPES.includes(q.type)) // Exclude display-only question types
             .sort((a, b) => {
                 // First sort by groupOrder (treating null/undefined as 0)
                 const aGroupOrder = a.groupOrder || 0;
@@ -1720,6 +1723,11 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
     };
 
     const getQuestionStatus = (question, submission) => {
+        // Display-only question types don't require answers and shouldn't be marked as unanswered
+        if (NON_QUESTION_TYPES.includes(question.type)) {
+            return 'not_applicable';
+        }
+
         const answer = submission.answers[question.id];
         const isAnswered = answer !== undefined && answer !== '';
 
@@ -2297,14 +2305,22 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                                 required: q.required
                                                             }));
 
+                                                            // Filter out display-only questions (not_applicable) for status calculation
+                                                            const answerableStatuses = statuses.filter(s => s.status !== 'not_applicable');
+
+                                                            // If no answerable questions in this section, show gray
+                                                            if (answerableStatuses.length === 0) {
+                                                                return 'bg-gray-400';
+                                                            }
+
                                                             // Red: Any incorrect OR any unanswered required questions
-                                                            if (statuses.some(s => s.status === 'incorrect') ||
-                                                                statuses.some(s => s.status === 'unanswered' && s.required)) {
+                                                            if (answerableStatuses.some(s => s.status === 'incorrect') ||
+                                                                answerableStatuses.some(s => s.status === 'unanswered' && s.required)) {
                                                                 return 'bg-red-500';
                                                             }
 
                                                             // Green: All answered AND all marked correct
-                                                            if (statuses.every(s => s.status === 'correct')) {
+                                                            if (answerableStatuses.every(s => s.status === 'correct')) {
                                                                 return 'bg-green-500';
                                                             }
 

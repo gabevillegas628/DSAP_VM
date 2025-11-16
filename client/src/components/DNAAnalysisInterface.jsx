@@ -431,6 +431,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
   const [highlightPositions, setHighlightPositions] = useState([]);
   const [currentSequenceQuestionId, setCurrentSequenceQuestionId] = useState(null);
 
+  // Define display-only question types that don't require answers
+  const NON_QUESTION_TYPES = ['text_header', 'section_divider', 'info_text', 'blast_comparison', 'sequence_display'];
+
   // Handlers for minimized modal stacking
   const handleMinimizeChromatogram = () => {
     setMinimizedModals(prev => {
@@ -1077,14 +1080,11 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
   };
 
   const getStepProgress = (stepId) => {
-    // Define which types don't require answers
-    const nonQuestionTypes = ['text_header', 'section_divider', 'info_text', 'blast_comparison', 'sequence_display'];
-
     // Only count actual questions (excluding display-only types)
     const stepQuestions = analysisQuestions
       .filter(q => q.step === stepId)
       .filter(q => shouldShowQuestion(q))
-      .filter(q => !nonQuestionTypes.includes(q.type));
+      .filter(q => !NON_QUESTION_TYPES.includes(q.type));
 
     if (stepQuestions.length === 0) return 0;
 
@@ -1174,6 +1174,21 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
         return a.order - b.order;
       })
     ]);
+  };
+
+  // Helper function to get all answerable questions in the current step for continuous numbering
+  const getAllStepAnswerableQuestions = () => {
+    return analysisQuestions
+      .filter(q => q.step === currentStep)
+      .filter(q => shouldShowQuestion(q))
+      .filter(q => !NON_QUESTION_TYPES.includes(q.type))
+      .sort((a, b) => {
+        // Sort by groupOrder first, then by question order
+        if (a.groupOrder !== b.groupOrder) {
+          return (a.groupOrder || 0) - (b.groupOrder || 0);
+        }
+        return a.order - b.order;
+      });
   };
 
   const getGroupsForStep = (stepId) => {
@@ -1286,13 +1301,11 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
   // Get progress for a specific group
   const getGroupProgress = (stepId, groupName) => {
-    const nonQuestionTypes = ['text_header', 'section_divider', 'info_text', 'blast_comparison', 'sequence_display'];
-
     const groupQuestions = analysisQuestions
       .filter(q => q.step === stepId)
       .filter(q => (q.questionGroup || 'General') === groupName)
       .filter(q => shouldShowQuestion(q))
-      .filter(q => !nonQuestionTypes.includes(q.type));
+      .filter(q => !NON_QUESTION_TYPES.includes(q.type));
 
     if (groupQuestions.length === 0) return 100;
 
@@ -2418,8 +2431,14 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
                   // If showing a specific group, display questions normally (not grouped)
                   if (currentGroup) {
-                    return currentStepQuestions.map((question, index) => {
+                    // Get all answerable questions in the step for continuous numbering across groups
+                    const allStepAnswerableQuestions = getAllStepAnswerableQuestions();
+
+                    return currentStepQuestions.map((question) => {
                       const isCorrect = isQuestionCorrect(question.id);
+                      const isAnswerable = !NON_QUESTION_TYPES.includes(question.type);
+                      const questionNumber = allStepAnswerableQuestions.indexOf(question) + 1;
+
                       return (
                         <div
                           key={question.id}
@@ -2428,34 +2447,36 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                               'border-gray-200'
                             }`}
                         >
-                          <div className="flex items-start justify-between mb-3">
-                            <h5 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
-                              <span>
-                                Question {index + 1}
-                                {question.required && <span className="text-red-500 ml-1">*</span>}
+                          {isAnswerable && (
+                            <div className="flex items-start justify-between mb-3">
+                              <h5 className="text-base font-semibold text-gray-900 flex items-center space-x-2">
+                                <span>
+                                  Question {questionNumber}
+                                  {question.required && <span className="text-red-500 ml-1">*</span>}
+                                </span>
+                                {masterHelpTopics[question.id] && (
+                                  <button
+                                    onClick={() => onOpenHelp && onOpenHelp(question.id, question.text)}
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="Get help with this question"
+                                  >
+                                    <HelpCircle className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {isCorrect && (
+                                  <CheckCircle className="w-4 h-4 text-green-600" title="Marked correct by instructor" />
+                                )}
+                              </h5>
+                              <span className={`text-xs px-2 py-1 rounded-full ${isCorrect ? 'bg-green-100 text-green-800' :
+                                isQuestionAnswered(question) ? 'bg-green-100 text-green-800' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>
+                                {isCorrect ? 'Correct' :
+                                  isQuestionAnswered(question) ? 'Answered' :
+                                    'Pending'}
                               </span>
-                              {masterHelpTopics[question.id] && (
-                                <button
-                                  onClick={() => onOpenHelp && onOpenHelp(question.id, question.text)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                  title="Get help with this question"
-                                >
-                                  <HelpCircle className="w-4 h-4" />
-                                </button>
-                              )}
-                              {isCorrect && (
-                                <CheckCircle className="w-4 h-4 text-green-600" title="Marked correct by instructor" />
-                              )}
-                            </h5>
-                            <span className={`text-xs px-2 py-1 rounded-full ${isCorrect ? 'bg-green-100 text-green-800' :
-                              isQuestionAnswered(question) ? 'bg-green-100 text-green-800' :
-                                'bg-gray-100 text-gray-600'
-                              }`}>
-                              {isCorrect ? 'Correct' :
-                                isQuestionAnswered(question) ? 'Answered' :
-                                  'Pending'}
-                            </span>
-                          </div>
+                            </div>
+                          )}
                           <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
                           {renderQuestion(question)}
                         </div>
@@ -2469,8 +2490,14 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                   // If there's only one group or all questions are ungrouped, display normally
                   if (groupedQuestions.length === 1 && (groupedQuestions[0][0] === 'General' || !groupedQuestions[0][0])) {
                     const questions = groupedQuestions[0][1];
-                    return questions.map((question, index) => {
+                    // Get all answerable questions in the step for continuous numbering
+                    const allStepAnswerableQuestions = getAllStepAnswerableQuestions();
+
+                    return questions.map((question) => {
                       const isCorrect = isQuestionCorrect(question.id);
+                      const isAnswerable = !NON_QUESTION_TYPES.includes(question.type);
+                      const questionNumber = allStepAnswerableQuestions.indexOf(question) + 1;
+
                       return (
                         <div
                           key={question.id}
@@ -2479,34 +2506,36 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                               'border-gray-200'
                             }`}
                         >
-                          <div className="flex items-start justify-between mb-3">
-                            <h5 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
-                              <span>
-                                Question {index + 1}
-                                {question.required && <span className="text-red-500 ml-1">*</span>}
+                          {isAnswerable && (
+                            <div className="flex items-start justify-between mb-3">
+                              <h5 className="text-base font-semibold text-gray-900 flex items-center space-x-2">
+                                <span>
+                                  Question {questionNumber}
+                                  {question.required && <span className="text-red-500 ml-1">*</span>}
+                                </span>
+                                {masterHelpTopics[question.id] && (
+                                  <button
+                                    onClick={() => onOpenHelp && onOpenHelp(question.id, question.text)}
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="Get help with this question"
+                                  >
+                                    <HelpCircle className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {isCorrect && (
+                                  <CheckCircle className="w-4 h-4 text-green-600" title="Marked correct by instructor" />
+                                )}
+                              </h5>
+                              <span className={`text-xs px-2 py-1 rounded-full ${isCorrect ? 'bg-green-100 text-green-800' :
+                                isQuestionAnswered(question) ? 'bg-green-100 text-green-800' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>
+                                {isCorrect ? 'Correct' :
+                                  isQuestionAnswered(question) ? 'Answered' :
+                                    'Pending'}
                               </span>
-                              {masterHelpTopics[question.id] && (
-                                <button
-                                  onClick={() => onOpenHelp && onOpenHelp(question.id, question.text)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                  title="Get help with this question"
-                                >
-                                  <HelpCircle className="w-4 h-4" />
-                                </button>
-                              )}
-                              {isCorrect && (
-                                <CheckCircle className="w-4 h-4 text-green-600" title="Marked correct by instructor" />
-                              )}
-                            </h5>
-                            <span className={`text-xs px-2 py-1 rounded-full ${isCorrect ? 'bg-green-100 text-green-800' :
-                              isQuestionAnswered(question) ? 'bg-green-100 text-green-800' :
-                                'bg-gray-100 text-gray-600'
-                              }`}>
-                              {isCorrect ? 'Correct' :
-                                isQuestionAnswered(question) ? 'Answered' :
-                                  'Pending'}
-                            </span>
-                          </div>
+                            </div>
+                          )}
                           <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
                           {renderQuestion(question)}
                         </div>
@@ -2515,7 +2544,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                   }
 
                   // Display grouped questions
-                  let globalQuestionIndex = 0;
+                  // Get all answerable questions in the step for continuous numbering across groups
+                  const allStepAnswerableQuestions = getAllStepAnswerableQuestions();
+
                   return groupedQuestions.map(([groupName, questions]) => (
                     <div key={groupName} className="border border-gray-200 rounded-lg overflow-hidden">
                       {/* Group Header */}
@@ -2532,8 +2563,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                       {/* Group Questions */}
                       <div className="p-4 space-y-4 bg-white">
                         {questions.map((question) => {
-                          globalQuestionIndex++;
                           const isCorrect = isQuestionCorrect(question.id);
+                          const isAnswerable = !NON_QUESTION_TYPES.includes(question.type);
+                          const questionNumber = allStepAnswerableQuestions.indexOf(question) + 1;
 
                           return (
                             <div
@@ -2543,34 +2575,36 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                   'border-gray-200'
                                 }`}
                             >
-                              <div className="flex items-start justify-between mb-3">
-                                <h5 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
-                                  <span>
-                                    Question {globalQuestionIndex}
-                                    {question.required && <span className="text-red-500 ml-1">*</span>}
+                              {isAnswerable && (
+                                <div className="flex items-start justify-between mb-3">
+                                  <h5 className="text-base font-semibold text-gray-900 flex items-center space-x-2">
+                                    <span>
+                                      Question {questionNumber}
+                                      {question.required && <span className="text-red-500 ml-1">*</span>}
+                                    </span>
+                                    {masterHelpTopics[question.id] && (
+                                      <button
+                                        onClick={() => onOpenHelp && onOpenHelp(question.id, question.text)}
+                                        className="text-blue-600 hover:text-blue-800"
+                                        title="Get help with this question"
+                                      >
+                                        <HelpCircle className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                    {isCorrect && (
+                                      <CheckCircle className="w-4 h-4 text-green-600" title="Marked correct by instructor" />
+                                    )}
+                                  </h5>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${isCorrect ? 'bg-green-100 text-green-800' :
+                                    isQuestionAnswered(question) ? 'bg-green-100 text-green-800' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                    {isCorrect ? 'Correct' :
+                                      isQuestionAnswered(question) ? 'Answered' :
+                                        'Pending'}
                                   </span>
-                                  {masterHelpTopics[question.id] && (
-                                    <button
-                                      onClick={() => onOpenHelp && onOpenHelp(question.id, question.text)}
-                                      className="text-blue-600 hover:text-blue-800"
-                                      title="Get help with this question"
-                                    >
-                                      <HelpCircle className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  {isCorrect && (
-                                    <CheckCircle className="w-4 h-4 text-green-600" title="Marked correct by instructor" />
-                                  )}
-                                </h5>
-                                <span className={`text-xs px-2 py-1 rounded-full ${isCorrect ? 'bg-green-100 text-green-800' :
-                                  isQuestionAnswered(question) ? 'bg-green-100 text-green-800' :
-                                    'bg-gray-100 text-gray-600'
-                                  }`}>
-                                  {isCorrect ? 'Correct' :
-                                    isQuestionAnswered(question) ? 'Answered' :
-                                      'Pending'}
-                                </span>
-                              </div>
+                                </div>
+                              )}
                               <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
                               {renderQuestion(question)}
                             </div>
