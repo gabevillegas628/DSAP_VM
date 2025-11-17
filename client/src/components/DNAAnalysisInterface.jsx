@@ -1072,7 +1072,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
     const answer = answers[question.id];
 
     if (question.type === 'sequence_range') {
-      return answer && (answer.value1 || answer.value2);
+      return answer && (answer.isNA || answer.value1 || answer.value2);
     }
 
     return answer !== undefined && answer !== '';
@@ -1318,7 +1318,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
       // Handle sequence_range questions (object with value1 and value2)
       if (q.type === 'sequence_range') {
-        return answer && (answer.value1 || answer.value2); // Consider answered if either field has content
+        return answer && (answer.isNA || answer.value1 || answer.value2); // Consider answered if N/A or either field has content
       }
 
       // Handle all other question types
@@ -1539,7 +1539,7 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
 
       // Handle sequence_range questions (object with value1 and value2)
       if (q.type === 'sequence_range') {
-        return answer && (answer.value1 || answer.value2); // Consider answered if either field has content
+        return answer && (answer.isNA || answer.value1 || answer.value2); // Consider answered if N/A or either field has content
       }
 
       // Handle all other question types
@@ -1826,48 +1826,68 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
           )}
 
           {question.type === 'sequence_range' && (
-            <div className="space-y-3">
-              <div className="flex items-end gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {question.options?.label1 || 'Begin'}
-                  </label>
-                  <input
-                    type="text"
-                    value={answer?.value1 || ''}
-                    onChange={(e) => {
-                      const newAnswer = {
-                        ...answer,
-                        value1: e.target.value
-                      };
-                      handleAnswerChange(question.id, newAnswer);
-                    }}
-                    disabled={disabled}
-                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder={disabled ? "Read-only" : ""}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {question.options?.label2 || 'End'}
-                  </label>
-                  <input
-                    type="text"
-                    value={answer?.value2 || ''}
-                    onChange={(e) => {
-                      const newAnswer = {
-                        ...answer,
-                        value2: e.target.value
-                      };
-                      handleAnswerChange(question.id, newAnswer);
-                    }}
-                    disabled={disabled}
-                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder={disabled ? "Read-only" : ""}
-                  />
-                </div>
+            <div className="flex items-end gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {question.options?.label1 || 'Begin'}
+                </label>
+                <input
+                  type="text"
+                  value={answer?.value1 || ''}
+                  onChange={(e) => {
+                    const newAnswer = {
+                      ...answer,
+                      value1: e.target.value
+                    };
+                    handleAnswerChange(question.id, newAnswer);
+                  }}
+                  disabled={disabled || answer?.isNA}
+                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder={disabled ? "Read-only" : ""}
+                />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {question.options?.label2 || 'End'}
+                </label>
+                <input
+                  type="text"
+                  value={answer?.value2 || ''}
+                  onChange={(e) => {
+                    const newAnswer = {
+                      ...answer,
+                      value2: e.target.value
+                    };
+                    handleAnswerChange(question.id, newAnswer);
+                  }}
+                  disabled={disabled || answer?.isNA}
+                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder={disabled ? "Read-only" : ""}
+                />
+              </div>
+
+              {question.options?.allowNA && (
+                <label className="flex items-center space-x-2 cursor-pointer pb-2">
+                  <input
+                    type="checkbox"
+                    checked={answer?.isNA || false}
+                    onChange={(e) => {
+                      const newAnswer = {
+                        ...answer,
+                        isNA: e.target.checked,
+                        // Clear values when N/A is checked
+                        value1: e.target.checked ? '' : answer?.value1 || '',
+                        value2: e.target.checked ? '' : answer?.value2 || ''
+                      };
+                      handleAnswerChange(question.id, newAnswer);
+                    }}
+                    disabled={disabled}
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <span className="text-sm text-gray-700">N/A (Not Applicable)</span>
+                </label>
+              )}
             </div>
           )}
           {!['yes_no', 'select', 'text', 'textarea', 'dna_sequence', 'protein_sequence', 'number', 'blast', 'sequence_range', 'sequence_display'].includes(question.type) && (

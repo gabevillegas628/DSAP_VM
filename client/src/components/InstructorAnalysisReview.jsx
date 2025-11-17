@@ -871,7 +871,9 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                     </span>
                                 ) : question.type === 'sequence_range' ? (
                                     <span className="text-xs text-gray-600">
-                                        (Expected: See values below)
+                                        {practiceAnswer.correctAnswer?.isNA
+                                            ? '(Expected: N/A - Not Applicable)'
+                                            : '(Expected: See values below)'}
                                     </span>
                                 ) : (
                                     <span className="text-xs text-gray-600">
@@ -903,20 +905,26 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                         </table>
                                     </div>
                                 ) : question.type === 'sequence_range' ? (
-                                    <div className="mt-1 grid grid-cols-2 gap-2">
-                                        <div>
-                                            <span className="text-xs text-gray-600">{question.options?.label1 || 'Begin'}:</span>
-                                            <span className="font-mono bg-gray-100 px-2 py-1 rounded ml-1">
-                                                {practiceAnswer.correctAnswer.value1}
-                                            </span>
+                                    practiceAnswer.correctAnswer?.isNA ? (
+                                        <span className="font-mono bg-gray-100 px-2 py-1 rounded">
+                                            N/A (Not Applicable)
+                                        </span>
+                                    ) : (
+                                        <div className="mt-1 grid grid-cols-2 gap-2">
+                                            <div>
+                                                <span className="text-xs text-gray-600">{question.options?.label1 || 'Begin'}:</span>
+                                                <span className="font-mono bg-gray-100 px-2 py-1 rounded ml-1">
+                                                    {practiceAnswer.correctAnswer.value1}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs text-gray-600">{question.options?.label2 || 'End'}:</span>
+                                                <span className="font-mono bg-gray-100 px-2 py-1 rounded ml-1">
+                                                    {practiceAnswer.correctAnswer.value2}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <span className="text-xs text-gray-600">{question.options?.label2 || 'End'}:</span>
-                                            <span className="font-mono bg-gray-100 px-2 py-1 rounded ml-1">
-                                                {practiceAnswer.correctAnswer.value2}
-                                            </span>
-                                        </div>
-                                    </div>
+                                    )
                                 ) : (
                                     <span className="font-mono bg-gray-100 px-2 py-1 rounded">
                                         {practiceAnswer.correctAnswer}
@@ -979,6 +987,16 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
 
             const correctData = correctAnswer.correctAnswer;
             const studentData = studentAnswer;
+
+            // If correct answer is N/A, check if student also selected N/A
+            if (correctData.isNA) {
+                return studentData.isNA === true;
+            }
+
+            // If student selected N/A but correct answer is not N/A, it's wrong
+            if (studentData.isNA) {
+                return false;
+            }
 
             // Compare both value1 and value2
             const value1Match = (studentData.value1 || '').trim().toLowerCase() ===
@@ -2112,16 +2130,20 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
 
             return (
                 <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <p className="text-xs font-medium text-gray-600 mb-1">{label1}:</p>
-                            <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value1 || 'No answer'}</p>
+                    {rangeAnswer.isNA ? (
+                        <p className="text-sm text-gray-800 font-mono">N/A (Not Applicable)</p>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-xs font-medium text-gray-600 mb-1">{label1}:</p>
+                                <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value1 || 'No answer'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-gray-600 mb-1">{label2}:</p>
+                                <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value2 || 'No answer'}</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-xs font-medium text-gray-600 mb-1">{label2}:</p>
-                            <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value2 || 'No answer'}</p>
-                        </div>
-                    </div>
+                    )}
                 </div>
             );
         } else {

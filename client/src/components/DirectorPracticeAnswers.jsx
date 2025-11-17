@@ -97,7 +97,9 @@ const DirectorPracticeAnswers = ({ isOpen, onClose, practiceClone }) => {
               ...answer,
               correctAnswer: {
                 ...(typeof answer.correctAnswer === 'object' ? answer.correctAnswer : {}),
-                [fieldKey]: value
+                [fieldKey]: value,
+                // Clear value1 and value2 when isNA is checked
+                ...(fieldKey === 'isNA' && value ? { value1: '', value2: '' } : {})
               }
             }
             : answer
@@ -133,16 +135,17 @@ const DirectorPracticeAnswers = ({ isOpen, onClose, practiceClone }) => {
         const question = analysisQuestions.find(q => q.id === answer.questionId);
 
         if (question && question.type === 'sequence_range') {
-          // For sequence_range, check if at least one field has content
+          // For sequence_range, check if N/A is selected or at least one field has content
           if (typeof answer.correctAnswer === 'string') {
             try {
               const parsed = JSON.parse(answer.correctAnswer);
-              return (parsed.value1 && parsed.value1.trim()) || (parsed.value2 && parsed.value2.trim());
+              return parsed.isNA || (parsed.value1 && parsed.value1.trim()) || (parsed.value2 && parsed.value2.trim());
             } catch (e) {
               return false;
             }
           } else if (typeof answer.correctAnswer === 'object') {
-            return (answer.correctAnswer.value1 && answer.correctAnswer.value1.trim()) ||
+            return answer.correctAnswer.isNA ||
+              (answer.correctAnswer.value1 && answer.correctAnswer.value1.trim()) ||
               (answer.correctAnswer.value2 && answer.correctAnswer.value2.trim());
           }
           return false;
@@ -441,7 +444,8 @@ const DirectorPracticeAnswers = ({ isOpen, onClose, practiceClone }) => {
                                               currentAnswer.correctAnswer.value1 : '') || ''}
                                             onChange={(e) => updateObjectAnswer(question.id, 'value1', e.target.value)}
                                             placeholder="Enter start value..."
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            disabled={typeof currentAnswer.correctAnswer === 'object' && currentAnswer.correctAnswer.isNA}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                           />
                                         </div>
                                         <div>
@@ -454,11 +458,25 @@ const DirectorPracticeAnswers = ({ isOpen, onClose, practiceClone }) => {
                                               currentAnswer.correctAnswer.value2 : '') || ''}
                                             onChange={(e) => updateObjectAnswer(question.id, 'value2', e.target.value)}
                                             placeholder="Enter end value..."
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            disabled={typeof currentAnswer.correctAnswer === 'object' && currentAnswer.correctAnswer.isNA}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                           />
                                         </div>
                                       </div>
                                     </div>
+
+                                    {question.options?.allowNA && (
+                                      <label className="flex items-center space-x-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={(typeof currentAnswer.correctAnswer === 'object' && currentAnswer.correctAnswer.isNA) || false}
+                                          onChange={(e) => updateObjectAnswer(question.id, 'isNA', e.target.checked)}
+                                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        />
+                                        <span className="text-sm text-gray-700">N/A (Not Applicable)</span>
+                                      </label>
+                                    )}
+
                                     <div className="bg-blue-50 p-3 rounded-md">
                                       <p className="text-sm text-blue-800">
                                         Students will see these as the expected range values.

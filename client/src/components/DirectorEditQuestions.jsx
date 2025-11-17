@@ -508,6 +508,29 @@ const QuestionModal = ({
                     />
                   </div>
                 </div>
+
+                <div>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newAnalysisQuestion.options?.allowNA || false}
+                      onChange={(e) => setNewAnalysisQuestion({
+                        ...newAnalysisQuestion,
+                        options: {
+                          ...newAnalysisQuestion.options,
+                          allowNA: e.target.checked
+                        }
+                      })}
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm font-medium text-gray-700">
+                      Allow "N/A" option
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">
+                    Students can mark this question as not applicable
+                  </p>
+                </div>
               </div>
             )}
 
@@ -890,7 +913,8 @@ const DirectorEditQuestions = () => {
               } :
                 newAnalysisQuestion.type === 'sequence_range' ? {
                   label1: newAnalysisQuestion.options?.label1 || 'Begin',
-                  label2: newAnalysisQuestion.options?.label2 || 'End'
+                  label2: newAnalysisQuestion.options?.label2 || 'End',
+                  allowNA: newAnalysisQuestion.options?.allowNA || false
                 } :
                   newAnalysisQuestion.type === 'sequence_display' ? {
                     sourceQuestionId: newAnalysisQuestion.options?.sourceQuestionId
@@ -937,7 +961,8 @@ const DirectorEditQuestions = () => {
             } :
               updates.type === 'sequence_range' ? {
                 label1: updates.options?.label1 || 'Begin',
-                label2: updates.options?.label2 || 'End'
+                label2: updates.options?.label2 || 'End',
+                allowNA: updates.options?.allowNA || false
               } :
                 newAnalysisQuestion.type === 'sequence_display' ? {
                   sourceQuestionId: newAnalysisQuestion.options?.sourceQuestionId
@@ -1010,7 +1035,8 @@ const DirectorEditQuestions = () => {
     } else if (question.type === 'sequence_range' && question.options) {
       optionsToSet = {
         label1: question.options.label1 || '',
-        label2: question.options.label2 || ''
+        label2: question.options.label2 || '',
+        allowNA: question.options.allowNA || false
       };
     } else {
       optionsToSet = {};
@@ -1048,7 +1074,8 @@ const DirectorEditQuestions = () => {
             } :
               newAnalysisQuestion.type === 'sequence_range' ? {
                 label1: newAnalysisQuestion.options?.label1 || 'Begin',
-                label2: newAnalysisQuestion.options?.label2 || 'End'
+                label2: newAnalysisQuestion.options?.label2 || 'End',
+                allowNA: newAnalysisQuestion.options?.allowNA || false
               } : undefined,
         questionGroup: newAnalysisQuestion.questionGroup || null,
         

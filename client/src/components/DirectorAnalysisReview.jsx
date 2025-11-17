@@ -2045,16 +2045,20 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
       return (
         <div className="bg-gray-50 rounded-lg p-3">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-1">{label1}:</p>
-              <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value1 || 'No answer'}</p>
+          {rangeAnswer.isNA ? (
+            <p className="text-sm text-gray-800 font-mono">N/A (Not Applicable)</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-1">{label1}:</p>
+                <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value1 || 'No answer'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-1">{label2}:</p>
+                <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value2 || 'No answer'}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-1">{label2}:</p>
-              <p className="text-sm text-gray-800 font-mono">{rangeAnswer.value2 || 'No answer'}</p>
-            </div>
-          </div>
+          )}
         </div>
       );
     } else {
