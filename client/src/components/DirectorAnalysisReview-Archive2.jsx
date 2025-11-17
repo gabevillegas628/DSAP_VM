@@ -140,41 +140,22 @@ const estimateQuestionHeight = (question) => {
   }
 };
 
-// Helper function to pack questions into two columns
-// Prefers alternating pattern but allows height-based optimization when needed
+// Helper function to pack questions into two columns based on estimated heights
 const packQuestionsIntoColumns = (questions) => {
   const leftColumn = [];
   const rightColumn = [];
   let leftHeight = 0;
   let rightHeight = 0;
-  const heightThreshold = 500; // Allow height-based override if difference > 500px
 
-  questions.forEach((question, index) => {
+  questions.forEach(question => {
     const height = estimateQuestionHeight(question);
-    const heightDifference = Math.abs(leftHeight - rightHeight);
 
-    // Determine natural alternating position (even indices go left, odd go right)
-    const shouldGoLeft = index % 2 === 0;
-
-    // Override alternating if height difference is significant
-    if (heightDifference > heightThreshold) {
-      // Place in shorter column to balance
-      if (leftHeight <= rightHeight) {
-        leftColumn.push(question);
-        leftHeight += height;
-      } else {
-        rightColumn.push(question);
-        rightHeight += height;
-      }
+    if (leftHeight <= rightHeight) {
+      leftColumn.push(question);
+      leftHeight += height;
     } else {
-      // Follow alternating pattern
-      if (shouldGoLeft) {
-        leftColumn.push(question);
-        leftHeight += height;
-      } else {
-        rightColumn.push(question);
-        rightHeight += height;
-      }
+      rightColumn.push(question);
+      rightHeight += height;
     }
   });
 
@@ -215,8 +196,6 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
   const [statusChangeLoading, setStatusChangeLoading] = useState(false);
   const [showNCBIDropdown, setShowNCBIDropdown] = useState(false);
   const [expandedDirectorNotes, setExpandedDirectorNotes] = useState(new Set()); // Track which director reference boxes are expanded
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
   const { currentUser } = useDNAContext();
 
   // Define display-only question types that don't require answers
@@ -273,16 +252,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showNCBIDropdown]);
 
-  // Auto-dismiss success modal after 3 seconds
-  useEffect(() => {
-    if (showSuccessModal) {
-      const timer = setTimeout(() => {
-        setShowSuccessModal(false);
-        setSuccessMessage('');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showSuccessModal]);
+
 
   // Add these functions after your existing functions like submitReview, downloadFile, etc.
 
@@ -1579,12 +1549,11 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
 
       if (onReviewCompleted) onReviewCompleted();
 
-      // Show success modal with the status and feedback count
+      // Update the alert to show actual sent count
       const sentCount = questionComments.filter(c =>
         c.feedback && c.feedback.trim() !== '' && c.feedbackVisible === true
       ).length;
-      setSuccessMessage(`Status changed to: ${statusMap[newStatus]}${sentCount > 0 ? ` (${sentCount} feedback messages sent)` : ''}`);
-      setShowSuccessModal(true);
+      alert(`Review submitted successfully! Status changed to: ${statusMap[newStatus]}${sentCount > 0 ? ` (${sentCount} feedback messages sent)` : ''}`);
 
     } catch (error) {
       console.error('=== ERROR SUBMITTING REVIEW ===');
@@ -2061,93 +2030,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
       return (
         <div className="space-y-3">
           <div className="bg-gray-50 rounded-lg p-3">
-            {question.type === 'textarea' ? (
-              <>
-                <div
-                  className="text-sm text-gray-800 break-words formatted-answer"
-                  dangerouslySetInnerHTML={{ __html: answer }}
-                />
-                <style>{`
-                  .formatted-answer a,
-                  .formatted-question a {
-                    color: #2563eb;
-                    text-decoration: underline;
-                  }
-                  .formatted-answer a:hover,
-                  .formatted-question a:hover {
-                    color: #1d4ed8;
-                  }
-                  .formatted-answer ul,
-                  .formatted-question ul {
-                    list-style-type: disc;
-                    margin-left: 1.5rem;
-                    margin-top: 0.5rem;
-                    margin-bottom: 0.5rem;
-                  }
-                  .formatted-answer ol,
-                  .formatted-question ol {
-                    list-style-type: decimal;
-                    margin-left: 1.5rem;
-                    margin-top: 0.5rem;
-                    margin-bottom: 0.5rem;
-                  }
-                  .formatted-answer ol ol,
-                  .formatted-question ol ol {
-                    list-style-type: lower-alpha;
-                    margin-left: 2.5rem;
-                  }
-                  .formatted-answer ol ol ol,
-                  .formatted-question ol ol ol {
-                    list-style-type: lower-roman;
-                    margin-left: 2.5rem;
-                  }
-                  .formatted-answer ul ul,
-                  .formatted-question ul ul {
-                    list-style-type: circle;
-                    margin-left: 2.5rem;
-                  }
-                  .formatted-answer ul ul ul,
-                  .formatted-question ul ul ul {
-                    list-style-type: square;
-                    margin-left: 2.5rem;
-                  }
-                  .formatted-answer ol.lettered-list,
-                  .formatted-question ol.lettered-list {
-                    list-style: none;
-                    counter-reset: lettered-counter;
-                  }
-                  .formatted-answer ol.lettered-list > li,
-                  .formatted-question ol.lettered-list > li {
-                    counter-increment: lettered-counter;
-                  }
-                  .formatted-answer ol.lettered-list > li::before,
-                  .formatted-question ol.lettered-list > li::before {
-                    content: counter(lettered-counter, upper-alpha) ") ";
-                    font-weight: normal;
-                  }
-                  .formatted-answer ol.lettered-list ol,
-                  .formatted-question ol.lettered-list ol {
-                    list-style-type: lower-roman;
-                    margin-left: 2.5rem;
-                  }
-                  .formatted-answer ol.lettered-list ol li::before,
-                  .formatted-question ol.lettered-list ol li::before {
-                    content: none;
-                  }
-                  .formatted-answer ol.lettered-list ol ol,
-                  .formatted-question ol.lettered-list ol ol {
-                    list-style-type: square;
-                    margin-left: 2.5rem;
-                  }
-                  .formatted-answer li,
-                  .formatted-question li {
-                    margin-bottom: 0.25rem;
-                  }
-                `}</style>
-              </>
-            ) : (
-              <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{answer}</p>
-            )}
+            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{answer}</p>
           </div>
 
           {/* Add Check Sequence button for DNA and Protein sequences */}
@@ -2592,7 +2475,7 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                           }`}>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2 flex-1">
-                                <span className="text-sm font-bold text-gray-700 bg-white px-3 py-1.5 rounded shadow-sm min-w-[3rem] text-center">
+                                <span className="text-xs font-bold text-gray-700 bg-white px-2 py-1 rounded shadow-sm">
                                   Q{index + 1}
                                 </span>
                                 {isMarkedCorrect && (
@@ -2601,8 +2484,8 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
                                 {isMarkedIncorrect && (
                                   <XCircle className="w-4 h-4 text-red-600" />
                                 )}
-                                <div
-                                  className="font-medium text-sm text-gray-900 formatted-question"
+                                <p
+                                  className="font-medium text-sm text-gray-900"
                                   dangerouslySetInnerHTML={{ __html: question.text }}
                                 />
                               </div>
@@ -2884,36 +2767,6 @@ const DirectorAnalysisReview = ({ onReviewCompleted }) => {
         fileName={selectedSubmission?.filename || selectedSubmission?.originalName || selectedSubmission?.cloneName}
         fileType={selectedSubmission?.type}
       />
-
-      {/* Success Modal - Auto-dismissing */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 transform transition-all animate-in fade-in zoom-in duration-300">
-            <div className="p-6">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Success!</h3>
-                  <p className="text-sm text-gray-600">Review submitted</p>
-                </div>
-              </div>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-800">{successMessage}</p>
-              </div>
-              <div className="mt-4 flex justify-center">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
-                  <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                </div>
-              </div>
-              <p className="text-xs text-center text-gray-500 mt-2">Closing automatically...</p>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

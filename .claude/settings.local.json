@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(powershell -Command \"(Get-Content DNAAnalysisInterface.jsx -Raw -Encoding UTF8) -replace ''Â¢Ãƒâ€¦Ã¢â‚¬Å\"\"ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Correct'', ''✓ Correct'' -replace ''Â¢Ãƒâ€¦Ã¢â‚¬Å\"\"ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Needs Improvement'', ''✗ Needs Improvement'' -replace ''Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¹ Instructor Feedback'', ''💬 Instructor Feedback'' | Set-Content DNAAnalysisInterface.jsx -Encoding UTF8 -NoNewline\")"
+      "Bash(powershell -Command \"(Get-Content DNAAnalysisInterface.jsx -Raw -Encoding UTF8) -replace ''Â¢Ãƒâ€¦Ã¢â‚¬Å\"\"ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Correct'', ''✓ Correct'' -replace ''Â¢Ãƒâ€¦Ã¢â‚¬Å\"\"ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Needs Improvement'', ''✗ Needs Improvement'' -replace ''Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¹ Instructor Feedback'', ''💬 Instructor Feedback'' | Set-Content DNAAnalysisInterface.jsx -Encoding UTF8 -NoNewline\")",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

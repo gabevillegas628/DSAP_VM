@@ -111,6 +111,74 @@ const analysisSteps = [
     }
 ];
 
+// Helper function to estimate question height based on type
+const estimateQuestionHeight = (question) => {
+  const baseHeight = 150; // Header + padding + feedback section
+
+  switch(question.type) {
+    case 'blast':
+      return question.isPractice ? 500 : 1000;
+    case 'dna_sequence':
+    case 'protein_sequence':
+      return 450;
+    case 'blast_comparison':
+      return 700;
+    case 'textarea':
+      return 350;
+    case 'sequence_range':
+      return 280;
+    case 'select':
+      return 250 + ((question.options?.length || 3) * 30);
+    case 'yes_no':
+    case 'text':
+    case 'number':
+      return 220;
+    default:
+      return 300;
+  }
+};
+
+// Helper function to pack questions into two columns
+// Prefers alternating pattern but allows height-based optimization when needed
+const packQuestionsIntoColumns = (questions) => {
+  const leftColumn = [];
+  const rightColumn = [];
+  let leftHeight = 0;
+  let rightHeight = 0;
+  const heightThreshold = 500; // Allow height-based override if difference > 500px
+
+  questions.forEach((question, index) => {
+    const height = estimateQuestionHeight(question);
+    const heightDifference = Math.abs(leftHeight - rightHeight);
+
+    // Determine natural alternating position (even indices go left, odd go right)
+    const shouldGoLeft = index % 2 === 0;
+
+    // Override alternating if height difference is significant
+    if (heightDifference > heightThreshold) {
+      // Place in shorter column to balance
+      if (leftHeight <= rightHeight) {
+        leftColumn.push(question);
+        leftHeight += height;
+      } else {
+        rightColumn.push(question);
+        rightHeight += height;
+      }
+    } else {
+      // Follow alternating pattern
+      if (shouldGoLeft) {
+        leftColumn.push(question);
+        leftHeight += height;
+      } else {
+        rightColumn.push(question);
+        rightHeight += height;
+      }
+    }
+  });
+
+  return { leftColumn, rightColumn };
+};
+
 const InstructorAnalysisReview = ({ onReviewCompleted }) => {
     const [submissions, setSubmissions] = useState([]);
     const [selectedSubmission, setSelectedSubmission] = useState(null);
@@ -142,6 +210,8 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
     const [selectedSequenceData, setSelectedSequenceData] = useState(null);
     const [sendingMessages, setSendingMessages] = useState(false);
     const [expandedDirectorNotes, setExpandedDirectorNotes] = useState(new Set());
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
 
     const { currentUser } = useDNAContext(); // ADD THIS LINE
 
@@ -167,6 +237,17 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
 
         loadCommonFeedback();
     }, []);
+
+    // Auto-dismiss success modal after 3 seconds
+    useEffect(() => {
+        if (showSuccessModal) {
+            const timer = setTimeout(() => {
+                setShowSuccessModal(false);
+                setSuccessMessage('');
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [showSuccessModal]);
 
     if (!currentUser?.school?.id) {
         return (
@@ -1572,12 +1653,12 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
 
             if (onReviewCompleted) onReviewCompleted();
 
-            // Update the alert to show actual sent count
-            // In submitReview function, find this section and update:
+            // Show success modal with the status and feedback count
             const sentCount = questionComments.filter(c =>
                 c.feedback && c.feedback.trim() !== '' && c.feedbackVisible === true
             ).length;
-            alert(`Review submitted successfully! Status changed to: ${statusMap[newStatus]}${sentCount > 0 ? ` (${sentCount} feedback messages sent)` : ''}`);
+            setSuccessMessage(`Status changed to: ${statusMap[newStatus]}${sentCount > 0 ? ` (${sentCount} feedback messages sent)` : ''}`);
+            setShowSuccessModal(true);
 
         } catch (error) {
             console.error('=== ERROR SUBMITTING REVIEW ===');
@@ -2047,7 +2128,93 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
             return (
                 <div className="space-y-3">
                     <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{answer}</p>
+                        {question.type === 'textarea' ? (
+                            <>
+                                <div
+                                    className="text-sm text-gray-800 break-words formatted-answer"
+                                    dangerouslySetInnerHTML={{ __html: answer }}
+                                />
+                                <style>{`
+                                    .formatted-answer a,
+                                    .formatted-question a {
+                                        color: #2563eb;
+                                        text-decoration: underline;
+                                    }
+                                    .formatted-answer a:hover,
+                                    .formatted-question a:hover {
+                                        color: #1d4ed8;
+                                    }
+                                    .formatted-answer ul,
+                                    .formatted-question ul {
+                                        list-style-type: disc;
+                                        margin-left: 1.5rem;
+                                        margin-top: 0.5rem;
+                                        margin-bottom: 0.5rem;
+                                    }
+                                    .formatted-answer ol,
+                                    .formatted-question ol {
+                                        list-style-type: decimal;
+                                        margin-left: 1.5rem;
+                                        margin-top: 0.5rem;
+                                        margin-bottom: 0.5rem;
+                                    }
+                                    .formatted-answer ol ol,
+                                    .formatted-question ol ol {
+                                        list-style-type: lower-alpha;
+                                        margin-left: 2.5rem;
+                                    }
+                                    .formatted-answer ol ol ol,
+                                    .formatted-question ol ol ol {
+                                        list-style-type: lower-roman;
+                                        margin-left: 2.5rem;
+                                    }
+                                    .formatted-answer ul ul,
+                                    .formatted-question ul ul {
+                                        list-style-type: circle;
+                                        margin-left: 2.5rem;
+                                    }
+                                    .formatted-answer ul ul ul,
+                                    .formatted-question ul ul ul {
+                                        list-style-type: square;
+                                        margin-left: 2.5rem;
+                                    }
+                                    .formatted-answer ol.lettered-list,
+                                    .formatted-question ol.lettered-list {
+                                        list-style: none;
+                                        counter-reset: lettered-counter;
+                                    }
+                                    .formatted-answer ol.lettered-list > li,
+                                    .formatted-question ol.lettered-list > li {
+                                        counter-increment: lettered-counter;
+                                    }
+                                    .formatted-answer ol.lettered-list > li::before,
+                                    .formatted-question ol.lettered-list > li::before {
+                                        content: counter(lettered-counter, upper-alpha) ") ";
+                                        font-weight: normal;
+                                    }
+                                    .formatted-answer ol.lettered-list ol,
+                                    .formatted-question ol.lettered-list ol {
+                                        list-style-type: lower-roman;
+                                        margin-left: 2.5rem;
+                                    }
+                                    .formatted-answer ol.lettered-list ol li::before,
+                                    .formatted-question ol.lettered-list ol li::before {
+                                        content: none;
+                                    }
+                                    .formatted-answer ol.lettered-list ol ol,
+                                    .formatted-question ol.lettered-list ol ol {
+                                        list-style-type: square;
+                                        margin-left: 2.5rem;
+                                    }
+                                    .formatted-answer li,
+                                    .formatted-question li {
+                                        margin-bottom: 0.25rem;
+                                    }
+                                `}</style>
+                            </>
+                        ) : (
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{answer}</p>
+                        )}
                     </div>
 
                     {/* Add Check Sequence button for DNA and Protein sequences */}
@@ -2103,7 +2270,7 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
 
     return (
         <>
-            <div className="h-[75vh] bg-gray-50 flex overflow-hidden border border-gray-200 rounded-lg shadow-sm">
+            <div className="h-[95vh] bg-gray-50 flex overflow-hidden border border-gray-200 rounded-lg shadow-sm">
                 {/* Collapsible Sidebar */}
                 <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} bg-white border-r border-gray-200 transition-all duration-300 flex-shrink-0 flex flex-col overflow-hidden`}>
                     {/* Sidebar Header with Collapse Toggle */}
@@ -2414,10 +2581,15 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                 </div>
 
                                 {/* Scrollable Content Area */}
-                                <div className="flex-1 overflow-y-auto p-4">
+                                <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
                                     {/* Two-Column Questions Layout */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {getQuestionsForSection(currentViewingSection, selectedSubmission.answers).map((question, index) => {
+                                    {(() => {
+                                        const allQuestions = getQuestionsForSection(currentViewingSection, selectedSubmission.answers);
+                                        const questionsWithIndex = allQuestions.map((q, idx) => ({ ...q, originalIndex: idx }));
+                                        const { leftColumn, rightColumn } = packQuestionsIntoColumns(questionsWithIndex);
+
+                                        const renderQuestionCard = (question) => {
+                                            const index = question.originalIndex;
                                             const commentData = getQuestionCommentData(question.id);
                                             const isMarkedCorrect = commentData.isCorrect === true;
                                             const isMarkedIncorrect = commentData.isCorrect === false;
@@ -2443,7 +2615,7 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                     }`}>
                                                         <div className="flex items-center justify-between">
                                                             <div className="flex items-center space-x-2 flex-1">
-                                                                <span className="text-xs font-medium text-gray-600 bg-white px-2 py-1 rounded">
+                                                                <span className="text-sm font-bold text-gray-700 bg-white px-3 py-1.5 rounded shadow-sm min-w-[3rem] text-center">
                                                                     Q{index + 1}
                                                                 </span>
                                                                 {isMarkedCorrect && (
@@ -2452,8 +2624,8 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                                 {isMarkedIncorrect && (
                                                                     <XCircle className="w-4 h-4 text-red-600" />
                                                                 )}
-                                                                <p
-                                                                    className="font-medium text-sm text-gray-900"
+                                                                <div
+                                                                    className="font-medium text-sm text-gray-900 formatted-question"
                                                                     dangerouslySetInnerHTML={{ __html: question.text }}
                                                                 />
                                                             </div>
@@ -2464,7 +2636,7 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                                     onClick={() => markQuestionAsCorrect(question.id)}
                                                                     className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedCorrect
                                                                             ? 'bg-green-600 text-white'
-                                                                            : 'bg-gray-200 text-gray-700 hover:bg-green-100'
+                                                                            : 'bg-white text-gray-700 hover:bg-green-100 shadow-sm'
                                                                         }`}
                                                                 >
                                                                     <CheckCircle className="w-3 h-3" />
@@ -2474,7 +2646,7 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                                     onClick={() => markQuestionAsIncorrect(question.id)}
                                                                     className={`px-2 py-1 text-xs rounded transition-colors flex items-center space-x-1 ${isMarkedIncorrect
                                                                             ? 'bg-red-600 text-white'
-                                                                            : 'bg-gray-200 text-gray-700 hover:bg-red-100'
+                                                                            : 'bg-white text-gray-700 hover:bg-red-100 shadow-sm'
                                                                         }`}
                                                                 >
                                                                     <XCircle className="w-3 h-3" />
@@ -2484,7 +2656,8 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                         </div>
                                                     </div>
 
-                                                    <div className="p-4">
+                                                    <div className="p-3">
+
                                                         {/* Unanswered Question Indicator */}
                                                         {isUnanswered && (
                                                             <div className="mb-2 bg-orange-50 border-l-4 border-orange-400 p-2 rounded">
@@ -2500,9 +2673,9 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                         )}
 
                                                         {/* Student Answer Display */}
-                                                        <div className="mb-3">
-                                                            <p className="text-sm font-medium text-gray-700 mb-2">Student Answer:</p>
-                                                            <div className="bg-gray-50 p-3 rounded border text-sm">
+                                                        <div className="mb-2">
+                                                            <p className="text-xs font-medium text-gray-700 mb-1">Student Answer:</p>
+                                                            <div className="bg-gray-50 p-2 rounded border text-sm">
                                                                 {isUnanswered
                                                                     ? <span className="text-gray-400 italic">No answer provided</span>
                                                                     : renderAnswerContent(question, selectedSubmission.answers[question.id])
@@ -2516,14 +2689,29 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                         </div>
 
                                                         {/* Feedback Section */}
-                                                        <div className="space-y-3 border-t pt-3">
-                                                        {/* Feedback Textarea with Common Feedback Dropdown */}
+                                                        <div className="space-y-2 border-t pt-2">
+                                                        {/* Feedback Textarea with inline controls */}
                                                         <div>
-                                                            <div className="flex items-center justify-between mb-2">
-                                                                <label className="text-xs font-medium text-gray-700">
-                                                                    Feedback for Student
-                                                                </label>
-                                                                {/* Common Feedback Dropdown */}
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <div className="flex items-center space-x-2">
+                                                                    <label className="text-xs font-medium text-gray-700">
+                                                                        Feedback for Student
+                                                                    </label>
+                                                                    {/* Visibility Checkbox - next to label */}
+                                                                    <div className="flex items-center space-x-1">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            id={`visible-${question.id}`}
+                                                                            checked={commentData.feedbackVisible}
+                                                                            onChange={(e) => updateFeedbackVisibility(question.id, e.target.checked)}
+                                                                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-3 h-3"
+                                                                        />
+                                                                        <label htmlFor={`visible-${question.id}`} className="text-xs text-gray-600">
+                                                                            Visible
+                                                                        </label>
+                                                                    </div>
+                                                                </div>
+                                                                {/* Common Feedback Dropdown - fixed width */}
                                                                 {getCommonFeedbackForQuestion(question.id).length > 0 && (
                                                                     <select
                                                                         onChange={(e) => {
@@ -2537,7 +2725,7 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                                                 e.target.value = ''; // Reset dropdown
                                                                             }
                                                                         }}
-                                                                        className="text-xs border border-gray-300 rounded px-2 py-1"
+                                                                        className="text-xs border border-gray-300 rounded px-2 py-0.5 min-w-48 max-w-64"
                                                                     >
                                                                         <option value="">Quick Feedback...</option>
                                                                         {getCommonFeedbackForQuestion(question.id).map(option => (
@@ -2554,22 +2742,8 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                                 onChange={(e) => addComment(question.id, e.target.value, commentData.feedbackVisible)}
                                                                 placeholder="Add feedback for the student..."
                                                                 rows={2}
-                                                                className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                                className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                             />
-
-                                                            {/* Visibility Checkbox */}
-                                                            <div className="flex items-center space-x-2 mt-2">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    id={`visible-${question.id}`}
-                                                                    checked={commentData.feedbackVisible}
-                                                                    onChange={(e) => updateFeedbackVisibility(question.id, e.target.checked)}
-                                                                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                                                />
-                                                                <label htmlFor={`visible-${question.id}`} className="text-xs text-gray-700">
-                                                                    Visible to student
-                                                                </label>
-                                                            </div>
                                                         </div>
 
                                                         {/* Collapsible Correct Answer Field (Director-Only Reference) */}
@@ -2624,8 +2798,19 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                                                     </div>
                                                 </div>
                                             );
-                                        })}
-                                    </div>
+                                        };
+
+                                        return (
+                                            <div className="flex gap-5">
+                                                <div className="w-1/2 space-y-5">
+                                                    {leftColumn.map(question => renderQuestionCard(question))}
+                                                </div>
+                                                <div className="w-1/2 space-y-5">
+                                                    {rightColumn.map(question => renderQuestionCard(question))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Show message if no questions in section */}
                                     {getQuestionsForSection(currentViewingSection, selectedSubmission.answers).length === 0 && (
@@ -2722,6 +2907,36 @@ const InstructorAnalysisReview = ({ onReviewCompleted }) => {
                 fileName={selectedSubmission?.filename || selectedSubmission?.originalName || selectedSubmission?.cloneName}
                 fileType={selectedSubmission?.type}
             />
+
+            {/* Success Modal - Auto-dismissing */}
+            {showSuccessModal && (
+                <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 transform transition-all animate-in fade-in zoom-in duration-300">
+                        <div className="p-6">
+                            <div className="flex items-center space-x-3 mb-4">
+                                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                                    <CheckCircle className="w-6 h-6 text-green-600" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900">Success!</h3>
+                                    <p className="text-sm text-gray-600">Review submitted</p>
+                                </div>
+                            </div>
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                <p className="text-sm text-green-800">{successMessage}</p>
+                            </div>
+                            <div className="mt-4 flex justify-center">
+                                <div className="flex space-x-1">
+                                    <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
+                                    <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                                    <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                                </div>
+                            </div>
+                            <p className="text-xs text-center text-gray-500 mt-2">Closing automatically...</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

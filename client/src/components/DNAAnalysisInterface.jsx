@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, ChevronDown, XCircle, CheckCircle, AlertCircle, Save, Eye, AlertTriangle, X, BarChart3, MessageCircle, Clock, RefreshCw, User, Dna, HelpCircle } from 'lucide-react';
+import { FileText, ChevronDown, XCircle, CheckCircle, AlertCircle, Save, Eye, AlertTriangle, X, BarChart3, MessageCircle, Clock, RefreshCw, User, Dna, HelpCircle, Bold, Italic, Underline, Link as LinkIcon, List, ListOrdered } from 'lucide-react';
 import MessageModal from './MessageModal';
 import ChromatogramViewer from './ChromatogramViewer';
 import DraggableChromogramModal from './DraggableChromogramModal';
@@ -14,6 +14,231 @@ import {
 } from '../statusConstraints.js';
 
 
+// Rich Text Editor Component for formatted text input
+const RichTextEditor = ({ value, onChange, disabled = false }) => {
+  const editorRef = React.useRef(null);
+  const isInitialMount = React.useRef(true);
+
+  // Only set innerHTML on initial mount or when value changes externally
+  React.useEffect(() => {
+    if (editorRef.current && isInitialMount.current) {
+      editorRef.current.innerHTML = value || '';
+      isInitialMount.current = false;
+    }
+  }, []);
+
+  // Update innerHTML only when value changes externally (not during typing)
+  React.useEffect(() => {
+    if (editorRef.current && !isInitialMount.current) {
+      // Only update if the content is significantly different (prevents cursor jump during typing)
+      const currentContent = editorRef.current.innerHTML;
+      if (value !== currentContent && document.activeElement !== editorRef.current) {
+        editorRef.current.innerHTML = value || '';
+      }
+    }
+  }, [value]);
+
+  const execCommand = (command, value = null) => {
+    if (disabled) return;
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const insertLettered = () => {
+    if (disabled) return;
+    // Create a lettered list
+    document.execCommand('insertOrderedList', false, null);
+    // Get the newly created list and add the custom class
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      let node = selection.getRangeAt(0).startContainer;
+      // Walk up to find the <ol> element
+      while (node && node.nodeName !== 'OL') {
+        node = node.parentNode;
+        if (node === editorRef.current) break;
+      }
+      if (node && node.nodeName === 'OL') {
+        node.className = 'lettered-list';
+      }
+    }
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const insertLink = () => {
+    if (disabled) return;
+    const url = prompt('Enter URL:');
+    if (url) {
+      execCommand('createLink', url);
+    }
+  };
+
+  const handleInput = () => {
+    if (disabled) return;
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (disabled) return;
+    // Handle Tab and Shift+Tab for list indentation
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        execCommand('outdent');
+      } else {
+        execCommand('indent');
+      }
+    }
+  };
+
+  return (
+    <div className="border border-gray-300 rounded-lg overflow-hidden">
+      <div className={`flex items-center space-x-1 p-2 bg-gray-50 border-b border-gray-300 ${disabled ? 'opacity-50' : ''}`}>
+        <button
+          type="button"
+          onClick={() => execCommand('bold')}
+          disabled={disabled}
+          className="p-2 hover:bg-gray-200 rounded transition disabled:cursor-not-allowed"
+          title="Bold"
+        >
+          <Bold className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => execCommand('italic')}
+          disabled={disabled}
+          className="p-2 hover:bg-gray-200 rounded transition disabled:cursor-not-allowed"
+          title="Italic"
+        >
+          <Italic className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => execCommand('underline')}
+          disabled={disabled}
+          className="p-2 hover:bg-gray-200 rounded transition disabled:cursor-not-allowed"
+          title="Underline"
+        >
+          <Underline className="w-4 h-4" />
+        </button>
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+        <button
+          type="button"
+          onClick={() => execCommand('insertUnorderedList')}
+          disabled={disabled}
+          className="p-2 hover:bg-gray-200 rounded transition disabled:cursor-not-allowed"
+          title="Bullet List (Tab to indent)"
+        >
+          <List className="w-6 h-6" />
+        </button>
+        <button
+          type="button"
+          onClick={() => execCommand('insertOrderedList')}
+          disabled={disabled}
+          className="p-2 hover:bg-gray-200 rounded transition disabled:cursor-not-allowed"
+          title="Numbered List (Tab to indent)"
+        >
+          <ListOrdered className="w-6 h-6" />
+        </button>
+        <button
+          type="button"
+          onClick={insertLettered}
+          disabled={disabled}
+          className="p-2 hover:bg-gray-200 rounded transition font-semibold text-sm disabled:cursor-not-allowed"
+          title="Lettered List (Tab to indent)"
+        >
+          A)
+        </button>
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+        <button
+          type="button"
+          onClick={insertLink}
+          disabled={disabled}
+          className="p-2 hover:bg-gray-200 rounded transition disabled:cursor-not-allowed"
+          title="Insert Link"
+        >
+          <LinkIcon className="w-4 h-4" />
+        </button>
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable={!disabled}
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        className={`p-3 min-h-[150px] bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+        style={{ wordBreak: 'break-word' }}
+        suppressContentEditableWarning={true}
+      />
+      <style>{`
+        div[contenteditable] a {
+          color: #2563eb;
+          text-decoration: underline;
+        }
+        div[contenteditable] a:hover {
+          color: #1d4ed8;
+        }
+        div[contenteditable] ul {
+          list-style-type: disc;
+          margin-left: 1.5rem;
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        div[contenteditable] ol {
+          list-style-type: decimal;
+          margin-left: 1.5rem;
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+        div[contenteditable] ol ol {
+          list-style-type: lower-alpha;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ol ol ol {
+          list-style-type: lower-roman;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ul ul {
+          list-style-type: circle;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ul ul ul {
+          list-style-type: square;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ol.lettered-list {
+          list-style: none;
+          counter-reset: lettered-counter;
+        }
+        div[contenteditable] ol.lettered-list > li {
+          counter-increment: lettered-counter;
+        }
+        div[contenteditable] ol.lettered-list > li::before {
+          content: counter(lettered-counter, upper-alpha) ") ";
+          font-weight: normal;
+        }
+        div[contenteditable] ol.lettered-list ol {
+          list-style-type: lower-roman;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] ol.lettered-list ol li::before {
+          content: none;
+        }
+        div[contenteditable] ol.lettered-list ol ol {
+          list-style-type: square;
+          margin-left: 2.5rem;
+        }
+        div[contenteditable] li {
+          margin-bottom: 0.25rem;
+        }
+      `}</style>
+    </div>
+  );
+};
 
 // Submit Confirmation Modal Component
 const SubmitConfirmationModal = ({ isOpen, onClose, onConfirm, cloneName, progress, isSubmitting }) => {
@@ -1447,13 +1672,10 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
           )}
 
           {question.type === 'textarea' && (
-            <textarea
+            <RichTextEditor
               value={answer}
-              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+              onChange={(html) => handleAnswerChange(question.id, html)}
               disabled={disabled}
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              placeholder={disabled ? "Read-only" : "Enter your detailed answer..."}
             />
           )}
 
@@ -2477,7 +2699,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                               </span>
                             </div>
                           )}
-                          <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
+                          {question.type !== 'text_header' && (
+                            <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
+                          )}
                           {renderQuestion(question)}
                         </div>
                       );
@@ -2536,7 +2760,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                               </span>
                             </div>
                           )}
-                          <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
+                          {question.type !== 'text_header' && (
+                            <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
+                          )}
                           {renderQuestion(question)}
                         </div>
                       );
@@ -2605,7 +2831,9 @@ const DNAAnalysisInterface = ({ cloneData, onClose, onProgressUpdate, onUnsavedC
                                   </span>
                                 </div>
                               )}
-                              <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
+                              {question.type !== 'text_header' && (
+                                <p className="text-sm text-gray-700 mb-3" dangerouslySetInnerHTML={{ __html: question.text }} style={{ wordBreak: 'break-word' }} onClick={handleLinkClick} />
+                              )}
                               {renderQuestion(question)}
                             </div>
                           );
