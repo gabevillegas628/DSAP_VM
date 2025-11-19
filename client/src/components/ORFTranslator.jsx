@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Copy, Download, AlertCircle, CheckCircle, RotateCw, X, Dna, Minus } from 'lucide-react';
+import { Copy, Download, AlertCircle, CheckCircle, RotateCw, X, Dna, Minus, Maximize2 } from 'lucide-react';
 
 // Standard genetic code table
 const GENETIC_CODE = {
@@ -52,6 +52,11 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
   // RAF throttling refs
   const rafPending = useRef(false);
   const latestTouchPos = useRef({ clientX: 0, clientY: 0 });
+
+  // Resize state
+  const [size, setSize] = useState({ width: window.innerWidth * 0.6, height: window.innerHeight * 0.8 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
   useEffect(() => {
     if (dnaSequence) {
@@ -159,6 +164,37 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
     setIsDragging(false);
   }, []);
 
+  // Resize handlers (mouse-only)
+  const handleResizeStart = useCallback((e) => {
+    if (e.target.closest('.resize-handle')) {
+      setIsResizing(true);
+      setResizeStart({
+        x: e.clientX,
+        y: e.clientY,
+        width: size.width,
+        height: size.height
+      });
+    }
+  }, [size]);
+
+  const handleResizeMove = useCallback((e) => {
+    if (!isResizing) return;
+
+    e.preventDefault();
+
+    const deltaX = e.clientX - resizeStart.x;
+    const deltaY = e.clientY - resizeStart.y;
+
+    const newWidth = Math.max(600, Math.min(window.innerWidth - 100, resizeStart.width + deltaX));
+    const newHeight = Math.max(400, Math.min(window.innerHeight - 100, resizeStart.height + deltaY));
+
+    setSize({ width: newWidth, height: newHeight });
+  }, [isResizing, resizeStart]);
+
+  const handleResizeUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
   // Minimize/restore handlers
   const handleMinimize = useCallback(() => {
     setSavedPosition(position);
@@ -201,6 +237,19 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
       };
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  // Set up event listeners for resizing (mouse-only)
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeUp);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeUp]);
 
   // Handle window resize - reposition if off-screen
   useEffect(() => {
@@ -489,11 +538,8 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
           style={{
             left: `${position.x}px`,
             top: `${position.y}px`,
-            width: '60vw',
-            minWidth: '600px',
-            maxWidth: '1200px',
-            maxHeight: '90vh',
-            resize: 'both',
+            width: `${size.width}px`,
+            height: `${size.height}px`,
             overflow: 'auto',
             touchAction: 'none',
             transform: (() => {
@@ -812,6 +858,15 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Resize Handle (mouse-only) - 25% smaller than ChromatogramModal */}
+        <div
+          className="resize-handle absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize bg-indigo-600 hover:bg-indigo-700 rounded-tl-lg opacity-70 hover:opacity-100 transition-opacity flex items-center justify-center"
+          onMouseDown={handleResizeStart}
+          style={{ touchAction: 'auto' }}
+        >
+          <Maximize2 className="w-4 h-4 text-white" />
         </div>
         </div>
       )}

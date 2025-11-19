@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { X, Move, Loader2, Minus, BarChart3 } from 'lucide-react';
+import { X, Move, Loader2, Minus, BarChart3, Maximize2 } from 'lucide-react';
 import ChromatogramViewer from './ChromatogramViewer';
 
 const DraggableChromogramModal = ({
@@ -27,6 +27,11 @@ const DraggableChromogramModal = ({
   // RAF throttling refs
   const rafPending = useRef(false);
   const latestTouchPos = useRef({ clientX: 0, clientY: 0 });
+
+  // Resize state
+  const [size, setSize] = useState({ width: window.innerWidth * 0.8, height: window.innerHeight * 0.85 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
   // Initialize position on first open (centered)
   useEffect(() => {
@@ -111,6 +116,37 @@ const DraggableChromogramModal = ({
     setIsDragging(false);
   }, []);
 
+  // Resize handlers (mouse-only)
+  const handleResizeStart = useCallback((e) => {
+    if (e.target.closest('.resize-handle')) {
+      setIsResizing(true);
+      setResizeStart({
+        x: e.clientX,
+        y: e.clientY,
+        width: size.width,
+        height: size.height
+      });
+    }
+  }, [size]);
+
+  const handleResizeMove = useCallback((e) => {
+    if (!isResizing) return;
+
+    e.preventDefault();
+
+    const deltaX = e.clientX - resizeStart.x;
+    const deltaY = e.clientY - resizeStart.y;
+
+    const newWidth = Math.max(600, Math.min(window.innerWidth - 100, resizeStart.width + deltaX));
+    const newHeight = Math.max(400, Math.min(window.innerHeight - 100, resizeStart.height + deltaY));
+
+    setSize({ width: newWidth, height: newHeight });
+  }, [isResizing, resizeStart]);
+
+  const handleResizeUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
   // Minimize/restore handlers
   const handleMinimize = useCallback(() => {
     setSavedPosition(position);
@@ -153,6 +189,19 @@ const DraggableChromogramModal = ({
       };
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  // Set up event listeners for resizing (mouse-only)
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeUp);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeUp]);
 
   // Handle window resize - reposition if off-screen
   useEffect(() => {
@@ -205,9 +254,8 @@ const DraggableChromogramModal = ({
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
-          width: '80vw',
-          maxWidth: '1400px',
-          maxHeight: '85vh',
+          width: `${size.width}px`,
+          height: `${size.height}px`,
           display: isMinimized && !animatingMinimize ? 'none' : 'flex',
           touchAction: 'none',
           transform: (() => {
@@ -269,7 +317,7 @@ const DraggableChromogramModal = ({
               <span className="ml-3 text-gray-600">Loading chromatogram...</span>
             </div>
           ) : chromatogramData ? (
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden h-full">
               <ChromatogramViewer
                 fileData={chromatogramData}
                 fileName={fileName}
@@ -287,6 +335,15 @@ const DraggableChromogramModal = ({
               <p className="text-gray-600">No chromatogram data available</p>
             </div>
           )}
+        </div>
+
+        {/* Resize Handle (mouse-only) */}
+        <div
+          className="resize-handle absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize bg-indigo-600 hover:bg-indigo-700 rounded-tl-lg opacity-70 hover:opacity-100 transition-opacity flex items-center justify-center"
+          onMouseDown={handleResizeStart}
+          style={{ touchAction: 'auto' }}
+        >
+          <Maximize2 className="w-4 h-4 text-white" />
         </div>
       </div>
     </div>

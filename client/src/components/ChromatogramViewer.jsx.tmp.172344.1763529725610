@@ -177,10 +177,8 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
     if (!canvas || !canvas.parentElement) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      // Wrap in RAF to prevent layout thrashing and ResizeObserver loop errors
-      requestAnimationFrame(() => {
-        drawChromatogram();
-      });
+      // Trigger a redraw when container size changes
+      drawChromatogram();
     });
 
     resizeObserver.observe(canvas.parentElement);
@@ -189,53 +187,6 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
       resizeObserver.disconnect();
     };
   }, [parsedData, zoomLevel, scrollPosition, showChannels]); // Redraw when these change
-
-  // Add touch scrolling to canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    let touchStartX = 0;
-    let touchStartScrollPos = 0;
-    let isTouchScrolling = false;
-
-    const handleTouchStart = (e) => {
-      if (e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartScrollPos = scrollPosition;
-        isTouchScrolling = true;
-      }
-    };
-
-    const handleTouchMove = (e) => {
-      if (!isTouchScrolling || e.touches.length !== 1) return;
-
-      e.preventDefault(); // Prevent page scrolling
-
-      const touchCurrentX = e.touches[0].clientX;
-      const deltaX = touchStartX - touchCurrentX;
-
-      // Convert pixel movement to scroll position change (sensitivity adjustment)
-      const scrollDelta = deltaX / canvas.width;
-
-      const newScrollPos = Math.max(0, Math.min(1, touchStartScrollPos + scrollDelta));
-      setScrollPosition(newScrollPos);
-    };
-
-    const handleTouchEnd = () => {
-      isTouchScrolling = false;
-    };
-
-    canvas.addEventListener('touchstart', handleTouchStart);
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      canvas.removeEventListener('touchstart', handleTouchStart);
-      canvas.removeEventListener('touchmove', handleTouchMove);
-      canvas.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [scrollPosition]);
 
   const handleSaveEdit = () => {
     if (!editValue || selectedPosition === null) return;
@@ -808,7 +759,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
     const container = canvas.parentElement;
     if (container) {
       canvas.width = container.offsetWidth || 1200;
-      canvas.height = container.offsetHeight || 300;
+      canvas.height = Math.min(container.offsetHeight || 300, 400); // Max 400px height
     } else {
       // Fallback to larger default sizes
       canvas.width = 1600;
@@ -839,16 +790,13 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
     // Draw chromatogram traces with normalization
     const colors = {
       A: '#00AA00', // Green
-      T: '#FF0000', // Red
+      T: '#FF0000', // Red  
       G: '#000000', // Black
       C: '#0000FF'  // Blue
     };
 
-    // Dynamic layout based on canvas height
-    const baseCallHeight = 30;  // Space for base call letters at top
-    const bottomReserve = 50;   // Space for quality bars, tick marks, and position numbers
-    const traceHeight = Math.max(100, canvas.height - baseCallHeight - bottomReserve); // Available height for traces
-    const baselineY = baseCallHeight + traceHeight;
+    const traceHeight = 120; // Available height for traces
+    const baselineY = 170;
 
     Object.entries(traces).forEach(([base, data]) => {
       if (!showChannels[base] || data.length === 0) return;
@@ -901,35 +849,35 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
         // Highlight selected position
         if (selectedPosition === i) {
           ctx.fillStyle = '#FFD700';
-          ctx.fillRect(x - 12, 5, 24, baseCallHeight - 5);
+          ctx.fillRect(x - 12, 10, 24, 25);
           ctx.strokeStyle = '#FF6600';
           ctx.lineWidth = 2;
-          ctx.strokeRect(x - 12, 5, 24, baseCallHeight - 5);
+          ctx.strokeRect(x - 12, 10, 24, 25);
         }
 
         // Highlight N bases with transparent red background
         if (base === 'N') {
           ctx.fillStyle = 'rgba(255, 0, 0, 0.3)'; // Transparent red
-          ctx.fillRect(x - 12, 5, 24, baseCallHeight - 5);
+          ctx.fillRect(x - 12, 10, 24, 25);
           ctx.strokeStyle = '#FF0000'; // Red border
           ctx.lineWidth = 1;
-          ctx.strokeRect(x - 12, 5, 24, baseCallHeight - 5);
+          ctx.strokeRect(x - 12, 10, 24, 25);
         }
 
         // Highlight edited positions with a different color
         if (editedPositions.has(i)) {
           ctx.fillStyle = 'rgba(128, 0, 255, 0.3)'; // Purple tint for edited bases
-          ctx.fillRect(x - 12, 5, 24, baseCallHeight - 5);
+          ctx.fillRect(x - 12, 10, 24, 25);
           ctx.strokeStyle = '#8000FF';
           ctx.lineWidth = 1;
-          ctx.strokeRect(x - 12, 5, 24, baseCallHeight - 5);
+          ctx.strokeRect(x - 12, 10, 24, 25);
         }
 
         // Always color base calls by their nucleotide type
         ctx.fillStyle = colors[base] || '#666666';
 
         // Draw base letter
-        ctx.fillText(base, x - 6, baseCallHeight - 5);
+        ctx.fillText(base, x - 6, 25);
 
         // Draw quality bar
         ctx.fillStyle = qual >= qualityThreshold ? colors[base] || '#666666' : '#CCCCCC';
@@ -983,8 +931,8 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
         ctx.beginPath();
-        ctx.moveTo(selectedX, baseCallHeight);
-        ctx.lineTo(selectedX, baselineY + 20);  // End just below quality bars
+        ctx.moveTo(selectedX, 30);  // Start higher
+        ctx.lineTo(selectedX, baselineY + 25);  // End closer to new layout
         ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -1000,7 +948,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
       const hoverX = ((peakPosition - startIndex) / (endIndex - startIndex)) * canvas.width;
       if (hoverX >= 0 && hoverX <= canvas.width) {
         ctx.fillStyle = 'rgba(173, 216, 230, 0.4)';
-        ctx.fillRect(hoverX - 12, 5, 24, baselineY + 20 - 5);  // Height from top to below quality bars
+        ctx.fillRect(hoverX - 12, 10, 24, baselineY + 35);
       }
     }
 
@@ -1041,17 +989,17 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
 
           // Draw highlight background
           ctx.fillStyle = 'rgba(255, 255, 0, 0.3)'; // Yellow with transparency
-          ctx.fillRect(startX - 12, 5, endX - startX + 24, baselineY + 20 - 5);
+          ctx.fillRect(startX - 12, 10, endX - startX + 24, baselineY + 35);
 
           // Draw highlight borders
           ctx.strokeStyle = '#FFD700';
           ctx.lineWidth = 2;
           ctx.setLineDash([]);
           ctx.beginPath();
-          ctx.moveTo(startX, 5);
-          ctx.lineTo(startX, baselineY + 20);
-          ctx.moveTo(endX, 5);
-          ctx.lineTo(endX, baselineY + 20);
+          ctx.moveTo(startX, 10);
+          ctx.lineTo(startX, baselineY + 45);
+          ctx.moveTo(endX, 10);
+          ctx.lineTo(endX, baselineY + 45);
           ctx.stroke();
         }
       }
@@ -1255,7 +1203,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg border flex flex-col h-full">
+    <div className="bg-white rounded-lg border">
       {/* Confirmation Modal */}
       {showConfirmModal && pendingEdit && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={cancelBaseEdit}>
@@ -1351,7 +1299,7 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
       </div>
 
       {/* Chromatogram Canvas */}
-      <div className="p-4 flex-1 flex flex-col overflow-hidden">
+      <div className="p-4">
         {/* Combined Controls: Selected Position + Highlight */}
         <div className="mb-2 p-3 bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg">
           <div className="flex items-center gap-3 flex-wrap">
@@ -1448,17 +1396,17 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
           </div>
         </div>
 
-        {/* Canvas container - takes remaining height */}
-        <div className="flex-1 min-h-0">
-          <canvas
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            onDoubleClick={handleNavigation}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseLeave={handleCanvasMouseLeave}
-            className="w-full h-full border border-gray-200 rounded cursor-pointer"
-          />
-        </div>
+
+
+        <canvas
+          ref={canvasRef}
+          onClick={handleCanvasClick}
+          onDoubleClick={handleNavigation}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseLeave={handleCanvasMouseLeave}
+          className="w-full border border-gray-200 rounded cursor-pointer"
+          style={{ maxHeight: '500px' }}
+        />
 
         {/* Click instruction */}
         <div className="mt-2 text-center">
