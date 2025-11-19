@@ -49,6 +49,10 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
   const [animatingMinimize, setAnimatingMinimize] = useState(false);
   const modalRef = useRef(null);
 
+  // RAF throttling refs
+  const rafPending = useRef(false);
+  const latestTouchPos = useRef({ clientX: 0, clientY: 0 });
+
   useEffect(() => {
     if (dnaSequence) {
       translateSequence();
@@ -90,10 +94,20 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
   // Drag handlers
   const handleMouseDown = useCallback((e) => {
     if (e.target.closest('.drag-handle')) {
+      // Prevent default touch behavior to stop scrolling
+      if (e.touches) {
+        e.preventDefault();
+      }
+
       setIsDragging(true);
+
+      // Unified touch/mouse coordinate extraction
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
       setDragOffset({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y
+        x: clientX - position.x,
+        y: clientY - position.y
       });
     }
   }, [position]);
@@ -103,21 +117,42 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
 
     e.preventDefault();
 
-    const modalWidth = modalRef.current.offsetWidth;
-    const modalHeight = modalRef.current.offsetHeight;
+    // Unified touch/mouse coordinate extraction
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-    let newX = e.clientX - dragOffset.x;
-    let newY = e.clientY - dragOffset.y;
+    // Store latest position
+    latestTouchPos.current = { clientX, clientY };
 
-    const minX = -modalWidth + 100;
-    const maxX = window.innerWidth - 100;
-    const minY = 0;
-    const maxY = window.innerHeight - 60;
+    // Only schedule one RAF at a time to prevent flooding
+    if (!rafPending.current) {
+      rafPending.current = true;
 
-    newX = Math.max(minX, Math.min(maxX, newX));
-    newY = Math.max(minY, Math.min(maxY, newY));
+      requestAnimationFrame(() => {
+        rafPending.current = false;
 
-    setPosition({ x: newX, y: newY });
+        if (!modalRef.current) return;
+
+        // Use the latest touch position
+        const { clientX: latestX, clientY: latestY } = latestTouchPos.current;
+
+        const modalWidth = modalRef.current.offsetWidth;
+        const modalHeight = modalRef.current.offsetHeight;
+
+        let newX = latestX - dragOffset.x;
+        let newY = latestY - dragOffset.y;
+
+        const minX = -modalWidth + 100;
+        const maxX = window.innerWidth - 100;
+        const minY = 0;
+        const maxY = window.innerHeight - 60;
+
+        newX = Math.max(minX, Math.min(maxX, newX));
+        newY = Math.max(minY, Math.min(maxY, newY));
+
+        setPosition({ x: newX, y: newY });
+      });
+    }
   }, [isDragging, dragOffset]);
 
   const handleMouseUp = useCallback(() => {
@@ -155,10 +190,14 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleMouseMove, { passive: false });
+      document.addEventListener('touchend', handleMouseUp);
 
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleMouseMove);
+        document.removeEventListener('touchend', handleMouseUp);
       };
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
@@ -456,6 +495,7 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
             maxHeight: '90vh',
             resize: 'both',
             overflow: 'auto',
+            touchAction: 'none',
             transform: (() => {
               if (animatingMinimize) {
                 // Calculate translation to pill position (bottom-right corner)
@@ -470,12 +510,16 @@ const ORFTranslator = ({ isOpen, onClose, initialSequence = '', onMinimize, onRe
             opacity: animatingMinimize ? 0 : 1
           }}
           onMouseDown={handleMouseDown}
+          onTouchStart={handleMouseDown}
           onClick={onFocus}
         >
           {/* Header */}
-          <div className={`drag-handle p-4 bg-indigo-600 rounded-t-lg ${
-            isDragging ? 'cursor-grabbing' : 'cursor-grab'
-          }`}>
+          <div
+            className={`drag-handle p-4 bg-indigo-600 rounded-t-lg ${
+              isDragging ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
+            style={{ touchAction: 'none' }}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Dna className="w-5 h-5 text-white" />
