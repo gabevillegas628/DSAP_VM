@@ -197,68 +197,52 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
     };
   }, [parsedData, zoomLevel, scrollPosition, showChannels]); // Redraw when these change
 
-  // Touch scrolling handlers with RAF throttling
-  const handleCanvasTouchStart = useCallback((e) => {
-    e.stopPropagation(); // Prevent event from bubbling to parent elements
-    if (e.touches.length === 1) {
-      touchStartX.current = e.touches[0].clientX;
-      touchStartScrollPos.current = scrollPosition;
-      isTouchScrolling.current = true;
-    }
-  }, [scrollPosition]);
-
-  const handleCanvasTouchMove = useCallback((e) => {
-    e.preventDefault(); // Prevent page scrolling - ALWAYS, before any checks
-    e.stopPropagation(); // Prevent event from bubbling to parent elements
-
-    if (!isTouchScrolling.current || e.touches.length !== 1) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Store latest touch position
-    latestTouchX.current = e.touches[0].clientX;
-
-    // Only schedule one RAF at a time to prevent flooding
-    if (!rafPendingScroll.current) {
-      rafPendingScroll.current = true;
-
-      requestAnimationFrame(() => {
-        rafPendingScroll.current = false;
-
-        if (!canvas) return;
-
-        const deltaX = touchStartX.current - latestTouchX.current;
-
-        // Convert pixel movement to scroll position change (reduced sensitivity)
-        const scrollDelta = (deltaX / canvas.width) * 0.5;
-
-        const newScrollPos = Math.max(0, Math.min(1, touchStartScrollPos.current + scrollDelta));
-        setScrollPosition(newScrollPos);
-      });
-    }
-  }, []);
-
-  const handleCanvasTouchEnd = useCallback((e) => {
-    e.stopPropagation(); // Prevent event from bubbling to parent elements
-    isTouchScrolling.current = false;
-  }, []);
-
   // Add touch scrolling to canvas
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !parsedData) return;
+    if (!canvas) return;
 
-    canvas.addEventListener('touchstart', handleCanvasTouchStart);
-    canvas.addEventListener('touchmove', handleCanvasTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleCanvasTouchEnd);
+    let touchStartX = 0;
+    let touchStartScrollPos = 0;
+    let isTouchScrolling = false;
+
+    const handleTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartScrollPos = scrollPosition;
+        isTouchScrolling = true;
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      if (!isTouchScrolling || e.touches.length !== 1) return;
+
+      e.preventDefault(); // Prevent page scrolling
+
+      const touchCurrentX = e.touches[0].clientX;
+      const deltaX = touchStartX - touchCurrentX;
+
+      // Convert pixel movement to scroll position change (sensitivity adjustment)
+      const scrollDelta = deltaX / canvas.width;
+
+      const newScrollPos = Math.max(0, Math.min(1, touchStartScrollPos + scrollDelta));
+      setScrollPosition(newScrollPos);
+    };
+
+    const handleTouchEnd = () => {
+      isTouchScrolling = false;
+    };
+
+    canvas.addEventListener('touchstart', handleTouchStart);
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd);
 
     return () => {
-      canvas.removeEventListener('touchstart', handleCanvasTouchStart);
-      canvas.removeEventListener('touchmove', handleCanvasTouchMove);
-      canvas.removeEventListener('touchend', handleCanvasTouchEnd);
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [parsedData, handleCanvasTouchStart, handleCanvasTouchMove, handleCanvasTouchEnd]);
+  }, [scrollPosition]);
 
   const handleSaveEdit = () => {
     if (!editValue || selectedPosition === null) return;
@@ -1480,7 +1464,6 @@ const ChromatogramViewer = ({ fileData, fileName, onClose }) => {
             onMouseMove={handleCanvasMouseMove}
             onMouseLeave={handleCanvasMouseLeave}
             className="w-full h-full border border-gray-200 rounded cursor-pointer"
-            style={{ touchAction: 'none' }}
           />
         </div>
 

@@ -28,10 +28,6 @@ const DraggableChromogramModal = ({
   const rafPending = useRef(false);
   const latestTouchPos = useRef({ clientX: 0, clientY: 0 });
 
-  // Resize RAF throttling refs
-  const resizeRafPending = useRef(false);
-  const latestResizePos = useRef({ clientX: 0, clientY: 0 });
-
   // Resize state
   const [size, setSize] = useState({ width: window.innerWidth * 0.8, height: window.innerHeight * 0.51 });
   const [isResizing, setIsResizing] = useState(false);
@@ -120,22 +116,13 @@ const DraggableChromogramModal = ({
     setIsDragging(false);
   }, []);
 
-  // Resize handlers (mouse and touch)
+  // Resize handlers (mouse-only)
   const handleResizeStart = useCallback((e) => {
     if (e.target.closest('.resize-handle')) {
-      // Prevent default touch behavior to stop scrolling
-      if (e.touches) {
-        e.preventDefault();
-      }
-
-      // Unified touch/mouse coordinate extraction
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
       setIsResizing(true);
       setResizeStart({
-        x: clientX,
-        y: clientY,
+        x: e.clientX,
+        y: e.clientY,
         width: size.width,
         height: size.height
       });
@@ -147,32 +134,13 @@ const DraggableChromogramModal = ({
 
     e.preventDefault();
 
-    // Unified touch/mouse coordinate extraction
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const deltaX = e.clientX - resizeStart.x;
+    const deltaY = e.clientY - resizeStart.y;
 
-    // Store latest resize position
-    latestResizePos.current = { clientX, clientY };
+    const newWidth = Math.max(600, Math.min(window.innerWidth - 100, resizeStart.width + deltaX));
+    const newHeight = Math.max(400, Math.min(window.innerHeight - 100, resizeStart.height + deltaY));
 
-    // Only schedule one RAF at a time to prevent flooding
-    if (!resizeRafPending.current) {
-      resizeRafPending.current = true;
-
-      requestAnimationFrame(() => {
-        resizeRafPending.current = false;
-
-        // Use the latest resize position
-        const { clientX: latestX, clientY: latestY } = latestResizePos.current;
-
-        const deltaX = latestX - resizeStart.x;
-        const deltaY = latestY - resizeStart.y;
-
-        const newWidth = Math.max(600, Math.min(window.innerWidth - 100, resizeStart.width + deltaX));
-        const newHeight = Math.max(400, Math.min(window.innerHeight - 100, resizeStart.height + deltaY));
-
-        setSize({ width: newWidth, height: newHeight });
-      });
-    }
+    setSize({ width: newWidth, height: newHeight });
   }, [isResizing, resizeStart]);
 
   const handleResizeUp = useCallback(() => {
@@ -222,19 +190,15 @@ const DraggableChromogramModal = ({
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  // Set up event listeners for resizing (mouse and touch)
+  // Set up event listeners for resizing (mouse-only)
   useEffect(() => {
     if (isResizing) {
       document.addEventListener('mousemove', handleResizeMove);
       document.addEventListener('mouseup', handleResizeUp);
-      document.addEventListener('touchmove', handleResizeMove, { passive: false });
-      document.addEventListener('touchend', handleResizeUp);
 
       return () => {
         document.removeEventListener('mousemove', handleResizeMove);
         document.removeEventListener('mouseup', handleResizeUp);
-        document.removeEventListener('touchmove', handleResizeMove);
-        document.removeEventListener('touchend', handleResizeUp);
       };
     }
   }, [isResizing, handleResizeMove, handleResizeUp]);
@@ -373,12 +337,11 @@ const DraggableChromogramModal = ({
           )}
         </div>
 
-        {/* Resize Handle (mouse and touch) */}
+        {/* Resize Handle (mouse-only) */}
         <div
-          className="resize-handle absolute bottom-0 right-0 w-12 h-12 cursor-nwse-resize bg-indigo-600 hover:bg-indigo-700 rounded-tl-lg opacity-70 hover:opacity-100 transition-opacity flex items-center justify-center"
+          className="resize-handle absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize bg-indigo-600 hover:bg-indigo-700 rounded-tl-lg opacity-70 hover:opacity-100 transition-opacity flex items-center justify-center"
           onMouseDown={handleResizeStart}
-          onTouchStart={handleResizeStart}
-          style={{ touchAction: 'none' }}
+          style={{ touchAction: 'auto' }}
         >
           <Maximize2 className="w-4 h-4 text-white" />
         </div>
